@@ -28,7 +28,7 @@ const START_SERVER = () => {
 
   // Swagger UI Route
   app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
-  console.log(`Swagger UI available at http://${hostname}:${port}/api-docs`);
+  console.log('Swagger UI available at /api-docs');
 
   // Routes
   app.use('/v1', APIs_V1);

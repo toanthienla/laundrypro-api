@@ -15,10 +15,14 @@ const options = {
     },
     servers: [
       {
-        url: env.BUILD_MODE === 'production'
-          ? `https://${env.APP_HOST}`
-          : `http://${env.APP_HOST}:${env.APP_PORT}`,
-        description: env.BUILD_MODE === 'production' ? 'Production server' : 'Development server'
+        url:
+          env.BUILD_MODE === 'production'
+            ? process.env.RENDER_EXTERNAL_URL
+            : `http://${env.APP_HOST}:${env.APP_PORT}`,
+        description:
+          env.BUILD_MODE === 'production'
+            ? 'Production server'
+            : 'Development server'
       }
     ],
     components: {

@@ -5,17 +5,20 @@ import ApiError from '~/utils/ApiError';
 
 export const corsOptions = {
   origin: (origin, callback) => {
-    // Any domains can access in dev mode
-    if (env.BUILD_MODE === 'dev') {
-      return callback(null, true);
-    }
+    // // Any domains can access in dev mode
+    // if (env.BUILD_MODE === 'dev') {
+    //   return callback(null, true);
+    // }
 
-    // Only whitelist domain can access
-    if (WHITELIST_DOMAINS.includes(origin)) {
-      return callback(null, true);
-    }
+    // // Only whitelist domain can access
+    // if (WHITELIST_DOMAINS.includes(origin)) {
+    //   return callback(null, true);
+    // }
 
-    return callback(new ApiError(StatusCodes.FORBIDDEN, `${origin} not allowed by our CORS Policy.`));
+    // return callback(new ApiError(StatusCodes.FORBIDDEN, `${origin} not allowed by our CORS Policy.`));
+
+    // Any domains can access
+    return callback(null, true);
   },
 
   // Some legacy browsers (IE11, various SmartTVs) choke on 204
