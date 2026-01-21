@@ -14,7 +14,7 @@ import { specs } from '~/config/swagger';
 const app = express();
 
 const hostname = env.APP_HOST;
-const port = env.APP_PORT;
+const port = process.env.PORT || env.APP_PORT;
 
 const START_SERVER = () => {
   // Cookie Parser
