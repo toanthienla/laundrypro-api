@@ -8,7 +8,7 @@ import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { pickUser, pickUserWithProfile } from '~/utils/formatters';
 import { WEBSITE_DOMAIN } from '~/utils/constants';
-import { BrevoProvider } from '~/providers/BrevoProvider';
+import { MailProvider } from '~/providers/MailProvider';
 import { JwtProvider } from '~/providers/JwtProvider';
 import { CloudinaryProvider } from '~/providers/CloudinaryProvider';
 import env from '~/config/environment';
@@ -47,26 +47,92 @@ const register = async (reqBody) => {
   const verificationLink = `${WEBSITE_DOMAIN}/verify-email?email=${email}&token=${verifyToken}`;
   const subject = 'Welcome to LaundryPro!  Verify your email';
   const htmlContent = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px">
-      <h2 style="color: #2563eb;">Welcome to LaundryPro!</h2>
-      <p>Thank you for signing up.  Please verify your email address by clicking the button below: </p>
-      <p style="margin: 30px 0;">
-        <a href="${verificationLink}" 
-           style="background-color: #2563eb; color:  white; padding: 12px 30px; 
-                  text-decoration: none; border-radius:  5px; display: inline-block;">
-          Verify Email
-        </a>
-      </p>
-      <p>Or copy and paste this link in your browser:</p>
-      <p style="color: #6b7280; word-break: break-all;">${verificationLink}</p>
-      <hr style="border: none; border-top:  1px solid #e5e7eb; margin: 30px 0;">
-      <p style="color: #9ca3af; font-size: 12px;">
-        If you didn't create an account with LaundryPro, please ignore this email.
-      </p>
+  <div style="
+    max-width:600px;
+    padding:32px;
+    font-family:Arial, sans-serif;
+    background-color:#ffffff;
+  ">
+
+    <h2 style="
+      color:#111827;
+      font-size:22px;
+      margin-bottom:16px;
+    ">
+      Verify your email address
+    </h2>
+
+    <p style="
+      color:#374151;
+      font-size:14px;
+      line-height:1.6;
+      margin-bottom:24px;
+    ">
+      Thanks for joining <strong>LaundryPro</strong>.
+      Please confirm your email address to activate your account.
+    </p>
+
+    <div style="margin:24px 0;">
+      <a
+        href="${verificationLink}"
+        style="
+          background-color:#2563eb;
+          color:#ffffff;
+          padding:12px 28px;
+          text-decoration:none;
+          border-radius:6px;
+          font-size:14px;
+          font-weight:600;
+          display:inline-block;
+        "
+      >
+        Verify Email
+      </a>
     </div>
+
+    <p style="
+      font-size:13px;
+      color:#6b7280;
+      margin-bottom:6px;
+    ">
+      Or copy and paste this link into your browser:
+    </p>
+
+    <p style="
+      font-size:12px;
+      color:#2563eb;
+      word-break:break-all;
+      margin-bottom:28px;
+    ">
+      ${verificationLink}
+    </p>
+
+    <hr style="
+      border:none;
+      border-top:1px solid #e5e7eb;
+      margin:24px 0;
+    " />
+
+    <p style="
+      font-size:12px;
+      color:#9ca3af;
+      line-height:1.6;
+    ">
+      If you didn’t create an account with LaundryPro, you can safely ignore this email.
+    </p>
+
+    <p style="
+      font-size:11px;
+      color:#9ca3af;
+      margin-top:16px;
+    ">
+      © ${new Date().getFullYear()} LaundryPro. All rights reserved.
+    </p>
+
+  </div>
   `;
 
-  await BrevoProvider.sendEmail(email, subject, htmlContent);
+  await MailProvider.sendEmail(email, subject, htmlContent);
 
   return pickUser(newUser);
 };
@@ -177,26 +243,93 @@ const forgotPassword = async (reqBody) => {
   const resetLink = `${WEBSITE_DOMAIN}/reset-password?email=${email}&token=${resetToken}`;
   const subject = 'Reset Your LaundryPro Password';
   const htmlContent = `
-    <div style="font-family:  Arial, sans-serif; max-width:  600px; margin: 0 auto;">
-      <h2 style="color: #2563eb;">Password Reset Request</h2>
-      <p>You requested to reset your password.  Click the button below to proceed:</p>
-      <p style="text-align: center; margin: 30px 0;">
-        <a href="${resetLink}" 
-           style="background-color: #2563eb; color: white; padding: 12px 30px; 
-                  text-decoration: none; border-radius: 5px; display: inline-block;">
-          Reset Password
-        </a>
-      </p>
-      <p>This link will expire in 30 minutes. </p>
-      <p style="color: #6b7280; word-break: break-all;">${resetLink}</p>
-      <hr style="border: none; border-top: 1px solid #e5e7eb; margin:  30px 0;">
-      <p style="color: #9ca3af; font-size: 12px;">
-        If you didn't request this, please ignore this email. 
-      </p>
+  <div style="
+    max-width:600px;
+    padding:32px;
+    font-family:Arial, sans-serif;
+    background-color:#ffffff;
+  ">
+
+    <h2 style="
+      color:#111827;
+      font-size:22px;
+      margin-bottom:16px;
+    ">
+      Reset your password
+    </h2>
+
+    <p style="
+      color:#374151;
+      font-size:14px;
+      line-height:1.6;
+      margin-bottom:24px;
+    ">
+      We received a request to reset your <strong>LaundryPro</strong> account password.
+      Click the button below to set a new password.
+    </p>
+
+    <div style="margin:24px 0;">
+      <a
+        href="${resetLink}"
+        style="
+          background-color:#2563eb;
+          color:#ffffff;
+          padding:12px 28px;
+          text-decoration:none;
+          border-radius:6px;
+          font-size:14px;
+          font-weight:600;
+          display:inline-block;
+        "
+      >
+        Reset Password
+      </a>
     </div>
+
+    <p style="
+      font-size:13px;
+      color:#6b7280;
+      margin-bottom:6px;
+    ">
+      This password reset link will expire in <strong>30 minutes</strong>.
+    </p>
+
+    <p style="
+      font-size:12px;
+      color:#2563eb;
+      word-break:break-all;
+      margin-bottom:28px;
+    ">
+      ${resetLink}
+    </p>
+
+    <hr style="
+      border:none;
+      border-top:1px solid #e5e7eb;
+      margin:24px 0;
+    " />
+
+    <p style="
+      font-size:12px;
+      color:#9ca3af;
+      line-height:1.6;
+    ">
+      If you didn’t request a password reset, please ignore this email.
+      Your account remains secure.
+    </p>
+
+    <p style="
+      font-size:11px;
+      color:#9ca3af;
+      margin-top:16px;
+    ">
+      © ${new Date().getFullYear()} LaundryPro. All rights reserved.
+    </p>
+
+  </div>
   `;
 
-  await BrevoProvider.sendEmail(email, subject, htmlContent);
+  await MailProvider.sendEmail(email, subject, htmlContent);
 };
 
 const resetPassword = async (reqBody) => {

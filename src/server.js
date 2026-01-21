@@ -2,12 +2,14 @@
 import express from 'express';
 import { CONNECT_DB, CLOSE_DB } from '~/config/mongodb';
 import exitHook from 'async-exit-hook';
-import env from '~/config/environment.js';
-import Router from '~/routes/index.js';
+import env from '~/config/environment';
+import { APIs_V1 } from '~/routes/v1/index';
 import errorHandlingMiddleware from '~/middlewares/errorHandlingMiddleware';
 import cors from 'cors';
 import { corsOptions } from '~/config/cors';
 import cookieParser from 'cookie-parser';
+import swaggerUi from 'swagger-ui-express';
+import { specs } from '~/config/swagger';
 
 const app = express();
 
@@ -24,8 +26,12 @@ const START_SERVER = () => {
   // JSON body
   app.use(express.json());
 
+  // Swagger UI Route
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
+  console.log(`Swagger UI available at http://${hostname}:${port}/api-docs`);
+
   // Routes
-  app.use('/', Router);
+  app.use('/v1', APIs_V1);
 
   // Error handling
   app.use(errorHandlingMiddleware);

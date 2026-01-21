@@ -5,4 +5,4 @@ const Router = express.Router();
 
 Router.use('/users', userRoute);
 
-export default Router;
+export const APIs_V1 = Router;

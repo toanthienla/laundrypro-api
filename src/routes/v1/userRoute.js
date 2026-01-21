@@ -33,6 +33,6 @@ Router.use(authMiddleware.isAdmin);
 Router.get('/', userController.getAllUsers);
 Router.get('/:id', userController.getUserById);
 Router.patch('/:id/status', userController.updateUserStatus);
-Router.delete('/: id', userController.deleteUser);
+Router.delete('/:id', userController.deleteUser);
 
 export const userRoute = Router;
