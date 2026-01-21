@@ -5,7 +5,7 @@
     "author": "G1-SE1816-FPT-UNIVERSITY",
     "description": "",
     "engines": {
-        "node": ">=18.x"
+        "node": "20.x"
     },
     "scripts": {
         "lint": "eslint src --ext js --report-unused-disable-directives --max-warnings 0",
