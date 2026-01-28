@@ -28,9 +28,10 @@ const getAllServices = async (req, res, next) => {
   }
 };
 
-const getCategories = async (req, res, next) => {
+const getServiceById = async (req, res, next) => {
   try {
-    const result = await serviceService.getCategories();
+    const { id } = req.params;
+    const result = await serviceService.getServiceById(id);
     res.status(StatusCodes.OK).json({
       success: true,
       data: result
@@ -40,10 +41,9 @@ const getCategories = async (req, res, next) => {
   }
 };
 
-const getServiceById = async (req, res, next) => {
+const getCategories = async (req, res, next) => {
   try {
-    const { id } = req.params;
-    const result = await serviceService.getServiceById(id);
+    const result = await serviceService.getCategories();
     res.status(StatusCodes.OK).json({
       success: true,
       data: result
@@ -84,8 +84,8 @@ const deleteService = async (req, res, next) => {
 export const serviceController = {
   createService,
   getAllServices,
-  getCategories,
   getServiceById,
+  getCategories,
   updateService,
   deleteService
 };

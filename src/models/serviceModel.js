@@ -6,15 +6,20 @@ const serviceSchema = new mongoose.Schema(
   {
     name: {
       type: String,
-      required: [true, 'Service name is required'],
+      required: [true, 'Name is required'],
       trim: true,
-      maxlength: [100, 'Service name cannot exceed 100 characters']
+      maxlength: [100, 'Name cannot exceed 100 characters']
     },
     category: {
       type: String,
       required: [true, 'Category is required'],
       trim: true,
       maxlength: [100, 'Category cannot exceed 100 characters']
+    },
+    price: {
+      type: Number,
+      required: [true, 'Price is required'],
+      min: [0, 'Price cannot be negative']
     },
     unit: {
       type: String,
@@ -29,10 +34,6 @@ const serviceSchema = new mongoose.Schema(
     active: {
       type: Boolean,
       default: true
-    },
-    _destroy: {
-      type: Boolean,
-      default: false
     }
   },
   {
@@ -41,29 +42,29 @@ const serviceSchema = new mongoose.Schema(
   }
 );
 
-// Static methods
-serviceSchema.statics.findAllActive = function () {
-  return this.find({ active: true, _destroy: false }).sort({ category: 1, name: 1 });
-};
+// Indexes
+serviceSchema.index({ name: 1 });
+serviceSchema.index({ category: 1 });
+serviceSchema.index({ active: 1 });
+serviceSchema.index({ price: 1 });
 
-serviceSchema.statics.findAll = function (query = {}) {
-  return this.find({ ...query, _destroy: false }).sort({ category: 1, name: 1 });
-};
+// ==================== STATIC METHODS ====================
 
 serviceSchema.statics.findOneById = function (serviceId) {
-  return this.findById(serviceId).where({ _destroy: false });
+  return this.findById(serviceId);
+};
+
+serviceSchema.statics.findAllActive = function () {
+  return this.find({ active: true }).sort({ category: 1, name: 1 });
 };
 
 serviceSchema.statics.findByCategory = function (category) {
-  return this.find({
-    category: { $regex: category, $options: 'i' },
-    active: true,
-    _destroy: false
-  }).sort({ name: 1 });
+  return this.find({ category, active: true }).sort({ name: 1 });
 };
 
 serviceSchema.statics.getCategories = async function () {
-  return this.distinct('category', { active: true, _destroy: false });
+  const categories = await this.distinct('category', { active: true });
+  return categories.sort();
 };
 
 serviceSchema.statics.updateService = async function (serviceId, updateData) {
@@ -77,15 +78,11 @@ serviceSchema.statics.updateService = async function (serviceId, updateData) {
     serviceId,
     { $set: updateData },
     { new: true, runValidators: true }
-  ).where({ _destroy: false });
+  );
 };
 
-serviceSchema.statics.softDelete = function (serviceId) {
-  return this.findByIdAndUpdate(
-    serviceId,
-    { $set: { _destroy: true, active: false } },
-    { new: true }
-  );
+serviceSchema.statics.deleteService = function (serviceId) {
+  return this.findByIdAndDelete(serviceId);
 };
 
 const Service = mongoose.model('Service', serviceSchema);

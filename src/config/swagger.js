@@ -17,7 +17,7 @@ const options = {
       {
         url:
           env.BUILD_MODE === 'production'
-            ? process.env.RENDER_EXTERNAL_URL
+            ? '/'
             : `http://${env.APP_HOST}:${env.APP_PORT}`,
         description:
           env.BUILD_MODE === 'production'

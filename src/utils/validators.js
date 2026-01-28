@@ -8,8 +8,8 @@ export const PASSWORD_RULE = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
 export const PASSWORD_RULE_MESSAGE =
   'Password must be at least 8 characters and include letters and numbers.';
 
-export const PHONE_RULE = /^(\+? 84|0)(3|5|7|8|9)[0-9]{8}$/;
-export const PHONE_RULE_MESSAGE = 'Please provide a valid Vietnamese phone number.';
+export const PHONE_RULE = /^\+[1-9]\d{6,14}$/;
+export const PHONE_RULE_MESSAGE = 'Please provide a valid phone number with country code (e.g., +84901234567).';
 
 export const LIMIT_COMMON_FILE_SIZE = 10485760; // byte = 10 MB
 export const ALLOW_COMMON_FILE_TYPES = ['image/jpg', 'image/jpeg', 'image/png'];

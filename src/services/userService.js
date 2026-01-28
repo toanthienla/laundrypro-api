@@ -1,449 +1,549 @@
 import { StatusCodes } from 'http-status-codes';
-import { User, USER_STATUS } from '~/models/userModel';
-import { Profile } from '~/models/profileModel';
-import { LoyaltyPoint } from '~/models/loyaltyPointModel';
-import ApiError from '~/utils/ApiError';
-import bcryptjs from 'bcryptjs';
-import crypto from 'crypto';
-import { v4 as uuidv4 } from 'uuid';
-import { pickUser, pickUserWithProfile } from '~/utils/formatters';
-import { WEBSITE_DOMAIN } from '~/utils/constants';
-import { MailProvider } from '~/providers/MailProvider';
+import { User, USER_ROLES, USER_STATUS } from '~/models/userModel';
+import { Order } from '~/models/orderModel';
+import { OrderItem } from '~/models/orderItemModel';
 import { JwtProvider } from '~/providers/JwtProvider';
+import { FirebaseProvider } from '~/providers/FirebaseProvider';
 import { CloudinaryProvider } from '~/providers/CloudinaryProvider';
-import env from '~/config/environment';
+import ApiError from '~/utils/ApiError';
+import { env } from '~/config/environment';
 
-const register = async (reqBody) => {
-  const { email, password, fullName, phone } = reqBody;
+// ==================== HELPER ====================
 
-  // Check if email already exists
-  const existingUser = await User.findOneByEmail(email);
-  if (existingUser) {
-    throw new ApiError(StatusCodes.CONFLICT, 'Email already registered.');
-  }
+const generateTokens = async (user) => {
+  const userInfo = { _id: user._id, phone: user.phone, role: user.role };
 
-  // Create new user
-  const verifyToken = uuidv4();
-  const newUser = await User.create({
-    email,
-    passwordHash: bcryptjs.hashSync(password, 10),
-    verifyToken
-  });
+  const accessToken = await JwtProvider.generateToken(
+    userInfo,
+    env.ACCESS_TOKEN_SECRET,
+    env.ACCESS_TOKEN_LIFE
+  );
 
-  // Create profile
-  await Profile.create({
-    userId: newUser._id,
-    fullName: fullName || email.split('@')[0],
-    phone: phone || null
-  });
+  const refreshToken = await JwtProvider.generateToken(
+    userInfo,
+    env.REFRESH_TOKEN_SECRET,
+    env.REFRESH_TOKEN_LIFE
+  );
 
-  // Initialize loyalty points
-  await LoyaltyPoint.create({
-    customerId: newUser._id,
-    points: 0
-  });
-
-  // Send verification email
-  const verificationLink = `${WEBSITE_DOMAIN}/verify-email?email=${email}&token=${verifyToken}`;
-  const subject = 'Welcome to LaundryPro!  Verify your email';
-  const htmlContent = `
-  <div style="
-    max-width:600px;
-    padding:32px;
-    font-family:Arial, sans-serif;
-    background-color:#ffffff;
-  ">
-
-    <h2 style="
-      color:#111827;
-      font-size:22px;
-      margin-bottom:16px;
-    ">
-      Verify your email address
-    </h2>
-
-    <p style="
-      color:#374151;
-      font-size:14px;
-      line-height:1.6;
-      margin-bottom:24px;
-    ">
-      Thanks for joining <strong>LaundryPro</strong>.
-      Please confirm your email address to activate your account.
-    </p>
-
-    <div style="margin:24px 0;">
-      <a
-        href="${verificationLink}"
-        style="
-          background-color:#2563eb;
-          color:#ffffff;
-          padding:12px 28px;
-          text-decoration:none;
-          border-radius:6px;
-          font-size:14px;
-          font-weight:600;
-          display:inline-block;
-        "
-      >
-        Verify Email
-      </a>
-    </div>
-
-    <p style="
-      font-size:13px;
-      color:#6b7280;
-      margin-bottom:6px;
-    ">
-      Or copy and paste this link into your browser:
-    </p>
-
-    <p style="
-      font-size:12px;
-      color:#2563eb;
-      word-break:break-all;
-      margin-bottom:28px;
-    ">
-      ${verificationLink}
-    </p>
-
-    <hr style="
-      border:none;
-      border-top:1px solid #e5e7eb;
-      margin:24px 0;
-    " />
-
-    <p style="
-      font-size:12px;
-      color:#9ca3af;
-      line-height:1.6;
-    ">
-      If you didn’t create an account with LaundryPro, you can safely ignore this email.
-    </p>
-
-    <p style="
-      font-size:11px;
-      color:#9ca3af;
-      margin-top:16px;
-    ">
-      © ${new Date().getFullYear()} LaundryPro. All rights reserved.
-    </p>
-
-  </div>
-  `;
-
-  await MailProvider.sendEmail(email, subject, htmlContent);
-
-  return pickUser(newUser);
+  return { accessToken, refreshToken };
 };
 
-const verifyEmail = async (reqBody) => {
-  const { email, token } = reqBody;
+const formatUserResponse = (user) => ({
+  _id: user._id,
+  phone: user.phone,
+  email: user.email,
+  name: user.name,
+  role: user.role,
+  address: user.address,
+  avatar: user.avatar,
+  isVerified: user.isVerified,
+  hasPassword: user.hasPassword,
+  status: user.status,
+  lastLogin: user.lastLogin,
+  createdAt: user.createdAt
+});
 
-  const user = await User.findOneByEmail(email);
+// ==================== AUTH ====================
+
+/**
+ * Check if user can login with password
+ * Returns user info for login method selection
+ */
+const checkLoginMethod = async (reqBody) => {
+  const { phone } = reqBody;
+
+  if (!phone) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, 'Phone is required.');
+  }
+
+  const user = await User.findByPhone(phone);
+
+  // User not found - must be created by staff first
   if (!user) {
-    throw new ApiError(StatusCodes.NOT_FOUND, 'User not found.');
-  }
-
-  if (user.status === USER_STATUS.ACTIVE) {
-    throw new ApiError(StatusCodes.CONFLICT, 'Email already verified.');
-  }
-
-  if (user.verifyToken !== token) {
-    throw new ApiError(StatusCodes.BAD_REQUEST, 'Invalid verification token.');
-  }
-
-  const updatedUser = await User.updateUser(user._id, {
-    verifyToken: null,
-    status: USER_STATUS.ACTIVE
-  });
-
-  return pickUser(updatedUser);
-};
-
-const login = async (reqBody) => {
-  const { email, password } = reqBody;
-
-  const user = await User.findOneByEmail(email);
-  if (!user) {
-    throw new ApiError(StatusCodes.UNAUTHORIZED, 'Invalid email or password.');
-  }
-
-  if (!bcryptjs.compareSync(password, user.passwordHash)) {
-    throw new ApiError(StatusCodes.UNAUTHORIZED, 'Invalid email or password.');
-  }
-
-  if (user.status === USER_STATUS.PENDING) {
-    throw new ApiError(StatusCodes.FORBIDDEN, 'Please verify your email first.');
+    throw new ApiError(
+      StatusCodes.NOT_FOUND,
+      'Account not found. Please visit our store to create an account.'
+    );
   }
 
   if (user.status === USER_STATUS.SUSPENDED) {
     throw new ApiError(StatusCodes.FORBIDDEN, 'Your account has been suspended.');
   }
 
-  // Update last login
-  await User.updateUser(user._id, { lastLogin: new Date() });
+  // Not verified - must use OTP first
+  if (!user.isVerified) {
+    return {
+      exists: true,
+      isVerified: false,
+      hasPassword: false,
+      loginMethod: 'otp',
+      message: 'Please verify your phone with OTP first.'
+    };
+  }
 
-  // Get profile
-  const profile = await Profile.findByUserId(user._id);
+  // Verified user
+  return {
+    exists: true,
+    isVerified: true,
+    hasPassword: user.hasPassword,
+    loginMethod: user.hasPassword ? 'both' : 'otp',
+    message: user.hasPassword
+      ? 'You can login with password or OTP.'
+      : 'Please login with OTP. You can set a password after login.'
+  };
+};
+
+/**
+ * Login with Firebase OTP token
+ * Customer must exist (created by staff) before they can login
+ */
+const loginWithOTP = async (reqBody) => {
+  const { idToken } = reqBody;
+
+  if (!idToken) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, 'Firebase ID token is required.');
+  }
+
+  // Verify token with Firebase
+  const firebaseData = await FirebaseProvider.verifyIdToken(idToken);
+
+  if (!firebaseData.phone) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, 'Phone number not found in Firebase token.');
+  }
+
+  // Find existing user and link Firebase UID (NO CREATE)
+  const user = await User.findByFirebaseAndLink({
+    uid: firebaseData.uid,
+    phone: firebaseData.phone,
+    email: firebaseData.email
+  });
+
+  // User not found - must be created by staff first
+  if (!user) {
+    throw new ApiError(
+      StatusCodes.NOT_FOUND,
+      'Account not found. Please visit our store to create an account.'
+    );
+  }
+
+  // Check if suspended
+  if (user.status === USER_STATUS.SUSPENDED) {
+    throw new ApiError(StatusCodes.FORBIDDEN, 'Your account has been suspended.');
+  }
 
   // Generate tokens
-  const tokenPayload = { _id: user._id, email: user.email, role: user.role };
-  const accessToken = await JwtProvider.generateToken(
-    tokenPayload,
-    env.ACCESS_TOKEN_SECRET,
-    env.ACCESS_TOKEN_LIFE
-  );
-  const refreshToken = await JwtProvider.generateToken(
-    tokenPayload,
-    env.REFRESH_TOKEN_SECRET,
-    env.REFRESH_TOKEN_LIFE
-  );
+  const { accessToken, refreshToken } = await generateTokens(user);
 
   return {
     accessToken,
     refreshToken,
-    user: pickUserWithProfile(user, profile)
+    user: formatUserResponse(user)
   };
 };
 
-const refreshToken = async (clientRefreshToken) => {
-  const decoded = await JwtProvider.verifyToken(
-    clientRefreshToken,
-    env.REFRESH_TOKEN_SECRET
-  );
+/**
+ * Login with phone and password
+ */
+const loginWithPassword = async (reqBody) => {
+  const { phone, password } = reqBody;
 
-  const tokenPayload = { _id: decoded._id, email: decoded.email, role: decoded.role };
-  const accessToken = await JwtProvider.generateToken(
-    tokenPayload,
-    env.ACCESS_TOKEN_SECRET,
-    env.ACCESS_TOKEN_LIFE
-  );
-
-  return { accessToken };
-};
-
-const forgotPassword = async (reqBody) => {
-  const { email } = reqBody;
-
-  const user = await User.findOneByEmail(email);
-  if (!user) {
-    // Don't reveal if email exists
-    return;
+  if (!phone || !password) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, 'Phone and password are required.');
   }
 
-  const resetToken = crypto.randomBytes(32).toString('hex');
-  const resetExpires = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+  // Find user with password
+  const user = await User.findByPhoneWithPassword(phone);
 
-  await User.updateUser(user._id, {
-    passwordResetToken: resetToken,
-    passwordResetExpires: resetExpires
-  });
+  if (!user) {
+    throw new ApiError(
+      StatusCodes.NOT_FOUND,
+      'Account not found. Please visit our store to create an account.'
+    );
+  }
 
-  const resetLink = `${WEBSITE_DOMAIN}/reset-password?email=${email}&token=${resetToken}`;
-  const subject = 'Reset Your LaundryPro Password';
-  const htmlContent = `
-  <div style="
-    max-width:600px;
-    padding:32px;
-    font-family:Arial, sans-serif;
-    background-color:#ffffff;
-  ">
+  if (user.status === USER_STATUS.SUSPENDED) {
+    throw new ApiError(StatusCodes.FORBIDDEN, 'Your account has been suspended.');
+  }
 
-    <h2 style="
-      color:#111827;
-      font-size:22px;
-      margin-bottom:16px;
-    ">
-      Reset your password
-    </h2>
+  // Check if verified
+  if (!user.isVerified) {
+    throw new ApiError(
+      StatusCodes.FORBIDDEN,
+      'Please verify your phone with OTP first before using password login.'
+    );
+  }
 
-    <p style="
-      color:#374151;
-      font-size:14px;
-      line-height:1.6;
-      margin-bottom:24px;
-    ">
-      We received a request to reset your <strong>LaundryPro</strong> account password.
-      Click the button below to set a new password.
-    </p>
+  // Check if has password
+  if (!user.hasPassword || !user.passwordHash) {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      'Password not set. Please login with OTP and set your password.'
+    );
+  }
 
-    <div style="margin:24px 0;">
-      <a
-        href="${resetLink}"
-        style="
-          background-color:#2563eb;
-          color:#ffffff;
-          padding:12px 28px;
-          text-decoration:none;
-          border-radius:6px;
-          font-size:14px;
-          font-weight:600;
-          display:inline-block;
-        "
-      >
-        Reset Password
-      </a>
-    </div>
+  // Verify password
+  const isValidPassword = await user.verifyPassword(password);
 
-    <p style="
-      font-size:13px;
-      color:#6b7280;
-      margin-bottom:6px;
-    ">
-      This password reset link will expire in <strong>30 minutes</strong>.
-    </p>
+  if (!isValidPassword) {
+    throw new ApiError(StatusCodes.UNAUTHORIZED, 'Invalid phone or password.');
+  }
 
-    <p style="
-      font-size:12px;
-      color:#2563eb;
-      word-break:break-all;
-      margin-bottom:28px;
-    ">
-      ${resetLink}
-    </p>
+  // Update last login
+  user.lastLogin = new Date();
+  await user.save();
 
-    <hr style="
-      border:none;
-      border-top:1px solid #e5e7eb;
-      margin:24px 0;
-    " />
+  // Generate tokens
+  const { accessToken, refreshToken } = await generateTokens(user);
 
-    <p style="
-      font-size:12px;
-      color:#9ca3af;
-      line-height:1.6;
-    ">
-      If you didn’t request a password reset, please ignore this email.
-      Your account remains secure.
-    </p>
-
-    <p style="
-      font-size:11px;
-      color:#9ca3af;
-      margin-top:16px;
-    ">
-      © ${new Date().getFullYear()} LaundryPro. All rights reserved.
-    </p>
-
-  </div>
-  `;
-
-  await MailProvider.sendEmail(email, subject, htmlContent);
+  return {
+    accessToken,
+    refreshToken,
+    user: formatUserResponse(user)
+  };
 };
 
-const resetPassword = async (reqBody) => {
-  const { email, token, newPassword } = reqBody;
+/**
+ * Set password for user (after OTP login)
+ */
+const setPassword = async (userId, reqBody) => {
+  const { password, confirmPassword } = reqBody;
 
-  const user = await User.findOneByEmail(email);
+  if (!password || !confirmPassword) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, 'Password and confirm password are required.');
+  }
+
+  if (password !== confirmPassword) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, 'Passwords do not match.');
+  }
+
+  if (password.length < 8) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, 'Password must be at least 8 characters.');
+  }
+
+  const user = await User.findOneById(userId);
+
   if (!user) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'User not found.');
   }
 
-  if (user.passwordResetToken !== token) {
-    throw new ApiError(StatusCodes.BAD_REQUEST, 'Invalid reset token.');
+  if (!user.isVerified) {
+    throw new ApiError(StatusCodes.FORBIDDEN, 'Please verify your phone with OTP first.');
   }
 
-  if (new Date() > user.passwordResetExpires) {
-    throw new ApiError(StatusCodes.BAD_REQUEST, 'Reset token has expired.');
-  }
+  await user.setPassword(password);
 
-  await User.updateUser(user._id, {
-    passwordHash: bcryptjs.hashSync(newPassword, 10),
-    passwordResetToken: null,
-    passwordResetExpires: null
-  });
+  return {
+    message: 'Password set successfully.',
+    hasPassword: true
+  };
 };
 
+/**
+ * Change password
+ */
 const changePassword = async (userId, reqBody) => {
-  const { currentPassword, newPassword } = reqBody;
+  const { currentPassword, newPassword, confirmPassword } = reqBody;
+
+  if (!newPassword || !confirmPassword) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, 'New password and confirm password are required.');
+  }
+
+  if (newPassword !== confirmPassword) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, 'Passwords do not match.');
+  }
+
+  if (newPassword.length < 8) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, 'Password must be at least 8 characters.');
+  }
 
   const user = await User.findOneByIdWithPassword(userId);
+
   if (!user) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'User not found.');
   }
 
-  if (!bcryptjs.compareSync(currentPassword, user.passwordHash)) {
-    throw new ApiError(StatusCodes.BAD_REQUEST, 'Current password is incorrect.');
+  // If user has password, verify current password
+  if (user.hasPassword && user.passwordHash) {
+    if (!currentPassword) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'Current password is required.');
+    }
+
+    const isValidPassword = await user.verifyPassword(currentPassword);
+
+    if (!isValidPassword) {
+      throw new ApiError(StatusCodes.UNAUTHORIZED, 'Current password is incorrect.');
+    }
   }
 
-  await User.updateUser(userId, {
-    passwordHash: bcryptjs.hashSync(newPassword, 10)
-  });
+  await user.setPassword(newPassword);
+
+  return {
+    message: 'Password changed successfully.'
+  };
 };
+
+/**
+ * Remove password (switch to OTP only)
+ */
+const removePassword = async (userId, reqBody) => {
+  const { currentPassword } = reqBody;
+
+  const user = await User.findOneByIdWithPassword(userId);
+
+  if (!user) {
+    throw new ApiError(StatusCodes.NOT_FOUND, 'User not found.');
+  }
+
+  if (!user.hasPassword) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, 'No password set.');
+  }
+
+  // Verify current password
+  if (!currentPassword) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, 'Current password is required.');
+  }
+
+  const isValidPassword = await user.verifyPassword(currentPassword);
+
+  if (!isValidPassword) {
+    throw new ApiError(StatusCodes.UNAUTHORIZED, 'Current password is incorrect.');
+  }
+
+  await user.removePassword();
+
+  return {
+    message: 'Password removed. You can now only login with OTP.',
+    hasPassword: false
+  };
+};
+
+/**
+ * Refresh token
+ */
+const refreshToken = async (clientRefreshToken) => {
+  try {
+    const decoded = await JwtProvider.verifyToken(clientRefreshToken, env.REFRESH_TOKEN_SECRET);
+
+    const user = await User.findOneById(decoded._id);
+
+    if (!user) {
+      throw new ApiError(StatusCodes.FORBIDDEN, 'User not found.');
+    }
+
+    if (user.status === USER_STATUS.SUSPENDED) {
+      throw new ApiError(StatusCodes.FORBIDDEN, 'Your account has been suspended.');
+    }
+
+    const userInfo = { _id: user._id, phone: user.phone, role: user.role };
+
+    const accessToken = await JwtProvider.generateToken(
+      userInfo,
+      env.ACCESS_TOKEN_SECRET,
+      env.ACCESS_TOKEN_LIFE
+    );
+
+    return { accessToken };
+  } catch (error) {
+    throw new ApiError(StatusCodes.FORBIDDEN, 'Invalid refresh token.');
+  }
+};
+
+// ==================== PROFILE ====================
 
 const getProfile = async (userId) => {
   const user = await User.findOneById(userId);
+
   if (!user) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'User not found.');
   }
 
-  const profile = await Profile.findByUserId(userId);
-  const loyaltyPoints = await LoyaltyPoint.findOne({ customerId: userId });
-
-  return {
-    ...pickUserWithProfile(user, profile),
-    loyaltyPoints: loyaltyPoints?.points || 0
-  };
+  return formatUserResponse(user);
 };
 
-const updateProfile = async (userId, reqBody, avatarFile) => {
+const updateProfile = async (userId, reqBody, file) => {
   const user = await User.findOneById(userId);
+
   if (!user) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'User not found.');
   }
 
   const updateData = {};
 
-  if (reqBody.fullName) updateData.fullName = reqBody.fullName;
-  if (reqBody.phone) updateData.phone = reqBody.phone;
+  if (reqBody.name) updateData.name = reqBody.name;
+  if (reqBody.email) updateData.email = reqBody.email;
   if (reqBody.address) updateData.address = reqBody.address;
 
-  if (avatarFile) {
-    const uploadResult = await CloudinaryProvider.streamUpload(
-      avatarFile.buffer,
-      'laundrypro/avatars'
-    );
-    updateData.avatar = uploadResult.secure_url;
+  if (file) {
+    const uploaded = await CloudinaryProvider.streamUpload(file.buffer, 'avatars');
+    updateData.avatar = uploaded.secure_url;
   }
 
-  const updatedProfile = await Profile.createOrUpdate(userId, updateData);
+  const updatedUser = await User.updateUser(userId, updateData);
 
-  return pickUserWithProfile(user, updatedProfile);
+  return formatUserResponse(updatedUser);
 };
 
-const getAllUsers = async ({ page = 1, limit = 10, role, status, search }) => {
-  const query = { _destroy: false };
+// ==================== CUSTOMER MANAGEMENT (Staff/Admin) ====================
 
-  if (role) query.role = role;
-  if (status) query.status = status;
+const findCustomerByPhone = async (phone) => {
+  const customer = await User.findByPhone(phone);
+
+  if (!customer || customer.role !== USER_ROLES.CUSTOMER) {
+    return null;
+  }
+
+  return customer;
+};
+
+const getAllCustomers = async (query = {}) => {
+  const { page = 1, limit = 10, search } = query;
+  const filter = { role: USER_ROLES.CUSTOMER };
+
   if (search) {
-    query.$or = [
-      { email: { $regex: search, $options: 'i' } }
+    filter.$or = [
+      { phone: { $regex: search, $options: 'i' } },
+      { name: { $regex: search, $options: 'i' } }
     ];
   }
 
   const skip = (parseInt(page) - 1) * parseInt(limit);
 
-  const [users, total] = await Promise.all([
-    User.find(query)
+  const [customers, total] = await Promise.all([
+    User.find(filter)
+      .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(parseInt(limit))
-      .sort({ createdAt: -1 }),
-    User.countDocuments(query)
+      .limit(parseInt(limit)),
+    User.countDocuments(filter)
   ]);
 
-  // Get profiles for all users
-  const userIds = users.map(u => u._id);
-  const profiles = await Profile.find({ userId: { $in: userIds } });
-  const profileMap = new Map(profiles.map(p => [p.userId.toString(), p]));
+  return {
+    customers,
+    pagination: {
+      page: parseInt(page),
+      limit: parseInt(limit),
+      total,
+      totalPages: Math.ceil(total / parseInt(limit))
+    }
+  };
+};
 
-  const usersWithProfiles = users.map(user =>
-    pickUserWithProfile(user, profileMap.get(user._id.toString()))
+const getCustomerById = async (customerId) => {
+  const customer = await User.findOneById(customerId);
+
+  if (!customer || customer.role !== USER_ROLES.CUSTOMER) {
+    throw new ApiError(StatusCodes.NOT_FOUND, 'Customer not found.');
+  }
+
+  return customer;
+};
+
+const getCustomerWithHistory = async (customerId) => {
+  const customer = await User.findOneById(customerId);
+
+  if (!customer || customer.role !== USER_ROLES.CUSTOMER) {
+    throw new ApiError(StatusCodes.NOT_FOUND, 'Customer not found.');
+  }
+
+  const orders = await Order.find({ customerId })
+    .populate('createdBy', 'phone name')
+    .sort({ createdAt: -1 });
+
+  const ordersWithItems = await Promise.all(
+    orders.map(async (order) => {
+      const orderItems = await OrderItem.findByOrderId(order._id);
+      return { ...order.toObject(), orderItems };
+    })
   );
 
+  const totalOrders = orders.length;
+  const completedOrders = orders.filter((o) => o.status === 'completed');
+  const totalSpent = completedOrders.reduce((sum, o) => sum + o.totalPrice, 0);
+
   return {
-    users: usersWithProfiles,
+    ...customer.toObject(),
+    stats: {
+      totalOrders,
+      completedOrders: completedOrders.length,
+      totalSpent
+    },
+    orderHistory: ordersWithItems
+  };
+};
+
+const updateCustomer = async (customerId, reqBody) => {
+  const customer = await User.findOneById(customerId);
+
+  if (!customer || customer.role !== USER_ROLES.CUSTOMER) {
+    throw new ApiError(StatusCodes.NOT_FOUND, 'Customer not found.');
+  }
+
+  const updateData = {};
+  if (reqBody.name) updateData.name = reqBody.name;
+  if (reqBody.email) updateData.email = reqBody.email;
+  if (reqBody.address) updateData.address = reqBody.address;
+  if (reqBody.note) updateData.note = reqBody.note;
+
+  const updatedCustomer = await User.updateUser(customerId, updateData);
+  return updatedCustomer;
+};
+
+/**
+ * Create customer (Staff/Admin only)
+ */
+const createCustomer = async (reqBody) => {
+  const { phone, name, email, address, note } = reqBody;
+
+  if (!phone || !name) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, 'Phone and name are required.');
+  }
+
+  const existingUser = await User.findByPhone(phone);
+  if (existingUser) {
+    throw new ApiError(StatusCodes.CONFLICT, 'Phone number already registered.');
+  }
+
+  const customer = await User.create({
+    phone,
+    name,
+    email: email || null,
+    address: address || null,
+    note: note || null,
+    role: USER_ROLES.CUSTOMER,
+    isVerified: false
+  });
+
+  return customer;
+};
+
+// ==================== USER MANAGEMENT (Admin) ====================
+
+const getAllUsers = async (query = {}) => {
+  const { page = 1, limit = 10, search, role, status } = query;
+  const filter = {};
+
+  if (search) {
+    filter.$or = [
+      { phone: { $regex: search, $options: 'i' } },
+      { name: { $regex: search, $options: 'i' } },
+      { email: { $regex: search, $options: 'i' } }
+    ];
+  }
+
+  if (role) filter.role = role;
+  if (status) filter.status = status;
+
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+
+  const [users, total] = await Promise.all([
+    User.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit)),
+    User.countDocuments(filter)
+  ]);
+
+  return {
+    users,
     pagination: {
       page: parseInt(page),
       limit: parseInt(limit),
@@ -455,16 +555,60 @@ const getAllUsers = async ({ page = 1, limit = 10, role, status, search }) => {
 
 const getUserById = async (userId) => {
   const user = await User.findOneById(userId);
+
   if (!user) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'User not found.');
   }
 
-  const profile = await Profile.findByUserId(userId);
-  return pickUserWithProfile(user, profile);
+  return user;
+};
+
+const createStaff = async (reqBody) => {
+  const { phone, name, email } = reqBody;
+
+  if (!phone || !name) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, 'Phone and name are required.');
+  }
+
+  const existingUser = await User.findByPhone(phone);
+  if (existingUser) {
+    throw new ApiError(StatusCodes.CONFLICT, 'Phone number already registered.');
+  }
+
+  const staff = await User.create({
+    phone,
+    name,
+    email: email || null,
+    role: USER_ROLES.STAFF,
+    isVerified: false
+  });
+
+  return staff;
+};
+
+const updateUserRole = async (userId, role) => {
+  const user = await User.findOneById(userId);
+
+  if (!user) {
+    throw new ApiError(StatusCodes.NOT_FOUND, 'User not found.');
+  }
+
+  if (!Object.values(USER_ROLES).includes(role)) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, 'Invalid role.');
+  }
+
+  const updatedUser = await User.findByIdAndUpdate(
+    userId,
+    { $set: { role } },
+    { new: true }
+  );
+
+  return updatedUser;
 };
 
 const updateUserStatus = async (userId, status) => {
   const user = await User.findOneById(userId);
+
   if (!user) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'User not found.');
   }
@@ -473,31 +617,73 @@ const updateUserStatus = async (userId, status) => {
     throw new ApiError(StatusCodes.BAD_REQUEST, 'Invalid status.');
   }
 
+  // Revoke Firebase tokens if suspending
+  if (status === USER_STATUS.SUSPENDED && user.firebaseUid) {
+    try {
+      await FirebaseProvider.revokeRefreshTokens(user.firebaseUid);
+    } catch (error) {
+      console.error('Failed to revoke Firebase tokens:', error.message);
+    }
+  }
+
   const updatedUser = await User.updateUser(userId, { status });
-  return pickUser(updatedUser);
+  return updatedUser;
 };
 
 const deleteUser = async (userId) => {
   const user = await User.findOneById(userId);
+
   if (!user) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'User not found.');
   }
 
-  await User.updateUser(userId, { _destroy: true });
+  const orderCount = await Order.countDocuments({
+    $or: [{ customerId: userId }, { createdBy: userId }]
+  });
+
+  if (orderCount > 0) {
+    throw new ApiError(
+      StatusCodes.BAD_REQUEST,
+      'Cannot delete user with existing orders. Consider suspending instead.'
+    );
+  }
+
+  // Delete from Firebase if exists
+  if (user.firebaseUid) {
+    try {
+      await FirebaseProvider.deleteUser(user.firebaseUid);
+    } catch (error) {
+      console.error('Failed to delete Firebase user:', error.message);
+    }
+  }
+
+  await User.deleteUser(userId);
 };
 
 export const userService = {
-  register,
-  verifyEmail,
-  login,
-  refreshToken,
-  forgotPassword,
-  resetPassword,
+  // Auth
+  checkLoginMethod,
+  loginWithOTP,
+  loginWithPassword,
+  setPassword,
   changePassword,
+  removePassword,
+  refreshToken,
+  // Profile
   getProfile,
   updateProfile,
+  // Customer Management
+  findCustomerByPhone,
+  getAllCustomers,
+  getCustomerById,
+  getCustomerWithHistory,
+  updateCustomer,
+  createCustomer,
+  // User Management
   getAllUsers,
   getUserById,
+  createStaff,
+  updateUserRole,
   updateUserStatus,
   deleteUser
 };

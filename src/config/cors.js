@@ -5,6 +5,11 @@ import ApiError from '~/utils/ApiError';
 
 export const corsOptions = {
   origin: (origin, callback) => {
+    if (!origin) {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      return callback(null, true);
+    }
+
     // Any domains can access in dev mode
     if (env.BUILD_MODE === 'dev') {
       return callback(null, true);

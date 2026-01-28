@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-const INVALID_UPDATE_FIELDS = ['_id', 'orderId', 'createdAt'];
+const INVALID_UPDATE_FIELDS = ['_id', 'orderId', 'serviceId', 'createdAt'];
 
 const orderItemSchema = new mongoose.Schema(
   {
@@ -14,7 +14,7 @@ const orderItemSchema = new mongoose.Schema(
       ref: 'Service',
       required: [true, 'Service ID is required']
     },
-    // Snapshot of service info at time of order
+    // Snapshots at order time (in case service changes later)
     serviceName: {
       type: String,
       required: [true, 'Service name is required'],
@@ -25,12 +25,16 @@ const orderItemSchema = new mongoose.Schema(
       required: [true, 'Service category is required'],
       trim: true
     },
+    servicePrice: {
+      type: Number,
+      required: [true, 'Service price is required'],
+      min: 0
+    },
     serviceUnit: {
       type: String,
       required: [true, 'Service unit is required'],
       trim: true
     },
-    // Quantity and pricing
     quantity: {
       type: Number,
       required: [true, 'Quantity is required'],
@@ -43,19 +47,13 @@ const orderItemSchema = new mongoose.Schema(
     },
     totalPrice: {
       type: Number,
-      required: [true, 'Total price is required'],
-      min: [0, 'Total price cannot be negative']
+      default: 0
     },
-    // Additional note for this item
     note: {
       type: String,
       trim: true,
       maxlength: [200, 'Note cannot exceed 200 characters'],
       default: null
-    },
-    _destroy: {
-      type: Boolean,
-      default: false
     }
   },
   {
@@ -64,19 +62,29 @@ const orderItemSchema = new mongoose.Schema(
   }
 );
 
-// Pre-save:  Calculate total price
+// Indexes
+orderItemSchema.index({ orderId: 1 });
+orderItemSchema.index({ serviceId: 1 });
+
+// Pre-save: Calculate totalPrice
 orderItemSchema.pre('save', function (next) {
   this.totalPrice = this.quantity * this.unitPrice;
   next();
 });
 
-// Static methods
+// ==================== STATIC METHODS ====================
+
 orderItemSchema.statics.findByOrderId = function (orderId) {
-  return this.find({ orderId, _destroy: false });
+  return this.find({ orderId }).populate('serviceId', 'name category price unit image');
 };
 
 orderItemSchema.statics.findOneById = function (itemId) {
-  return this.findById(itemId).where({ _destroy: false });
+  return this.findById(itemId);
+};
+
+orderItemSchema.statics.createItem = async function (itemData) {
+  const item = await this.create(itemData);
+  return item;
 };
 
 orderItemSchema.statics.updateItem = async function (itemId, updateData) {
@@ -86,12 +94,12 @@ orderItemSchema.statics.updateItem = async function (itemId, updateData) {
     }
   });
 
-  // Recalculate total if quantity or unitPrice changed
+  // Recalculate totalPrice if quantity or unitPrice changed
   if (updateData.quantity !== undefined || updateData.unitPrice !== undefined) {
     const item = await this.findById(itemId);
     if (item) {
-      const quantity = updateData.quantity ?? item.quantity;
-      const unitPrice = updateData.unitPrice ?? item.unitPrice;
+      const quantity = updateData.quantity !== undefined ? updateData.quantity : item.quantity;
+      const unitPrice = updateData.unitPrice !== undefined ? updateData.unitPrice : item.unitPrice;
       updateData.totalPrice = quantity * unitPrice;
     }
   }
@@ -100,31 +108,23 @@ orderItemSchema.statics.updateItem = async function (itemId, updateData) {
     itemId,
     { $set: updateData },
     { new: true, runValidators: true }
-  ).where({ _destroy: false });
-};
-
-orderItemSchema.statics.softDelete = function (itemId) {
-  return this.findByIdAndUpdate(
-    itemId,
-    { $set: { _destroy: true } },
-    { new: true }
   );
 };
 
-orderItemSchema.statics.softDeleteByOrderId = function (orderId) {
-  return this.updateMany(
-    { orderId },
-    { $set: { _destroy: true } }
-  );
+orderItemSchema.statics.deleteItem = function (itemId) {
+  return this.findByIdAndDelete(itemId);
 };
 
-// Calculate order total from all items
+orderItemSchema.statics.deleteByOrderId = function (orderId) {
+  return this.deleteMany({ orderId });
+};
+
 orderItemSchema.statics.calculateOrderTotal = async function (orderId) {
   const result = await this.aggregate([
-    { $match: { orderId: new mongoose.Types.ObjectId(orderId), _destroy: false } },
+    { $match: { orderId: new mongoose.Types.ObjectId(orderId) } },
     { $group: { _id: null, total: { $sum: '$totalPrice' } } }
   ]);
-  return result[0]?.total || 0;
+  return result.length > 0 ? result[0].total : 0;
 };
 
 const OrderItem = mongoose.model('OrderItem', orderItemSchema);

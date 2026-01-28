@@ -4,41 +4,62 @@ import { CloudinaryProvider } from '~/providers/CloudinaryProvider';
 import ApiError from '~/utils/ApiError';
 
 const createService = async (reqBody, imageFile) => {
-  const serviceData = { ...reqBody };
+  const { name, category, price, unit, active } = reqBody;
 
-  // Upload image to Cloudinary if provided
+  const serviceData = {
+    name,
+    category,
+    price: parseFloat(price),
+    unit,
+    active: active !== undefined ? active : true
+  };
+
   if (imageFile) {
-    const uploadResult = await CloudinaryProvider.streamUpload(
-      imageFile.buffer,
-      'laundrypro/services'
-    );
-    serviceData.image = uploadResult.secure_url;
+    const uploaded = await CloudinaryProvider.streamUpload(imageFile.buffer, 'services');
+    serviceData.image = uploaded.secure_url;
   }
 
-  const newService = await Service.create(serviceData);
-  return newService;
+  const service = await Service.create(serviceData);
+  return service;
 };
 
-const getAllServices = async ({ active, category, search }) => {
-  const query = { _destroy: false };
+const getAllServices = async (query = {}) => {
+  const { active, category, search, minPrice, maxPrice } = query;
+  const filter = {};
 
   if (active !== undefined) {
-    query.active = active === 'true';
+    filter.active = active === 'true';
   }
 
   if (category) {
-    query.category = { $regex: category, $options: 'i' };
+    filter.category = category;
   }
 
   if (search) {
-    query.$or = [
+    filter.$or = [
       { name: { $regex: search, $options: 'i' } },
       { category: { $regex: search, $options: 'i' } }
     ];
   }
 
-  const services = await Service.find(query).sort({ category: 1, name: 1 });
+  if (minPrice !== undefined || maxPrice !== undefined) {
+    filter.price = {};
+    if (minPrice !== undefined) filter.price.$gte = parseFloat(minPrice);
+    if (maxPrice !== undefined) filter.price.$lte = parseFloat(maxPrice);
+  }
+
+  const services = await Service.find(filter).sort({ category: 1, name: 1 });
   return services;
+};
+
+const getServiceById = async (serviceId) => {
+  const service = await Service.findOneById(serviceId);
+
+  if (!service) {
+    throw new ApiError(StatusCodes.NOT_FOUND, 'Service not found.');
+  }
+
+  return service;
 };
 
 const getCategories = async () => {
@@ -46,29 +67,24 @@ const getCategories = async () => {
   return categories;
 };
 
-const getServiceById = async (serviceId) => {
-  const service = await Service.findOneById(serviceId);
-  if (!service) {
-    throw new ApiError(StatusCodes.NOT_FOUND, 'Service not found.');
-  }
-  return service;
-};
-
 const updateService = async (serviceId, reqBody, imageFile) => {
   const service = await Service.findOneById(serviceId);
+
   if (!service) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Service not found.');
   }
 
-  const updateData = { ...reqBody };
+  const updateData = {};
 
-  // Upload new image to Cloudinary if provided
+  if (reqBody.name) updateData.name = reqBody.name;
+  if (reqBody.category) updateData.category = reqBody.category;
+  if (reqBody.price !== undefined) updateData.price = parseFloat(reqBody.price);
+  if (reqBody.unit) updateData.unit = reqBody.unit;
+  if (reqBody.active !== undefined) updateData.active = reqBody.active;
+
   if (imageFile) {
-    const uploadResult = await CloudinaryProvider.streamUpload(
-      imageFile.buffer,
-      'laundrypro/services'
-    );
-    updateData.image = uploadResult.secure_url;
+    const uploaded = await CloudinaryProvider.streamUpload(imageFile.buffer, 'services');
+    updateData.image = uploaded.secure_url;
   }
 
   const updatedService = await Service.updateService(serviceId, updateData);
@@ -77,18 +93,19 @@ const updateService = async (serviceId, reqBody, imageFile) => {
 
 const deleteService = async (serviceId) => {
   const service = await Service.findOneById(serviceId);
+
   if (!service) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Service not found.');
   }
 
-  await Service.softDelete(serviceId);
+  await Service.deleteService(serviceId);
 };
 
 export const serviceService = {
   createService,
   getAllServices,
-  getCategories,
   getServiceById,
+  getCategories,
   updateService,
   deleteService
 };

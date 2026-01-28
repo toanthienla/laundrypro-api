@@ -1,32 +1,45 @@
 import express from 'express';
-import { serviceValidation } from '~/validations/serviceValidation';
 import { serviceController } from '~/controllers/serviceController';
+import { serviceValidation } from '~/validations/serviceValidation';
 import { authMiddleware } from '~/middlewares/authMiddleware';
 import { multerMiddleware } from '~/middlewares/multerMiddleware';
 
 const Router = express.Router();
 
-// Public routes
-Router.get('/', serviceController.getAllServices);
-Router.get('/categories', serviceController.getCategories);
-Router.get('/:id', serviceController.getServiceById);
+// ============== PUBLIC ==============
+Router.route('/')
+  .get(serviceController.getAllServices);
 
-// Admin only routes
-Router.use(authMiddleware.isAuthorized);
-Router.use(authMiddleware.isAdmin);
+Router.route('/categories')
+  .get(serviceController.getCategories);
 
-Router.post(
-  '/',
-  multerMiddleware.upload.single('image'),
-  serviceValidation.createService,
-  serviceController.createService
-);
-Router.put(
-  '/: id',
-  multerMiddleware.upload.single('image'),
-  serviceValidation.updateService,
-  serviceController.updateService
-);
-Router.delete('/:id', serviceController.deleteService);
+Router.route('/:id')
+  .get(serviceValidation.validateId, serviceController.getServiceById);
+
+// ============== ADMIN ONLY ==============
+Router.route('/')
+  .post(
+    authMiddleware.isAuthorized,
+    authMiddleware.isAdmin,
+    multerMiddleware.upload.single('image'),
+    serviceValidation.createService,
+    serviceController.createService
+  );
+
+Router.route('/:id')
+  .put(
+    authMiddleware.isAuthorized,
+    authMiddleware.isAdmin,
+    serviceValidation.validateId,
+    multerMiddleware.upload.single('image'),
+    serviceValidation.updateService,
+    serviceController.updateService
+  )
+  .delete(
+    authMiddleware.isAuthorized,
+    authMiddleware.isAdmin,
+    serviceValidation.validateId,
+    serviceController.deleteService
+  );
 
 export const serviceRoute = Router;
