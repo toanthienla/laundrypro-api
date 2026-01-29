@@ -15,10 +15,9 @@ const options = {
     },
     servers: [
       {
-        url:
-          env.BUILD_MODE === 'production'
-            ? '/'
-            : `http://${env.APP_HOST}:${env.APP_PORT}`,
+        url: env.BUILD_MODE === 'production'
+          ? `https://${process.env.RENDER_EXTERNAL_HOSTNAME}`
+          : `http://${env.APP_HOST}:${env.APP_PORT}`,
         description:
           env.BUILD_MODE === 'production'
             ? 'Production server'
