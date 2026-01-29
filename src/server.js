@@ -42,7 +42,7 @@ const START_SERVER = () => {
 
   // Start server
   if (env.BUILD_MODE === 'production') {
-    app.listen(port, () => {
+    app.listen(port, '0.0.0.0', () => {
       console.log(`PRODUCTION: LaundryPro API running on port ${port}`);
     });
   } else {

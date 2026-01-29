@@ -5,7 +5,7 @@ const ORDER_STATUS = {
   COMPLETED: 'completed'
 };
 
-const INVALID_UPDATE_FIELDS = ['_id', 'customerId', 'createdBy', 'createdAt'];
+const INVALID_UPDATE_FIELDS = ['_id', 'customerId', 'createdBy', 'paidAmount', 'createdAt'];
 
 const orderSchema = new mongoose.Schema(
   {
@@ -32,6 +32,11 @@ const orderSchema = new mongoose.Schema(
       type: Number,
       default: 0,
       min: [0, 'Total price cannot be negative']
+    },
+    paidAmount: {
+      type: Number,
+      default: 0,
+      min: [0, 'Paid amount cannot be negative']
     },
     note: {
       type: String,

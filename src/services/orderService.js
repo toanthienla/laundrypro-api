@@ -286,6 +286,16 @@ const updateOrderStatus = async (orderId, status, userRole) => {
     throw new ApiError(StatusCodes.FORBIDDEN, 'Only admin can modify completed orders.');
   }
 
+  // If marking as completed, ensure payment is fully paid
+  if (status === ORDER_STATUS.COMPLETED) {
+    if (order.paidAmount < order.totalPrice) {
+      throw new ApiError(
+        StatusCodes.BAD_REQUEST,
+        'Order cannot be completed. Payment is not fully paid.'
+      );
+    }
+  }
+
   const updateData = { status };
 
   if (status === ORDER_STATUS.COMPLETED) {
