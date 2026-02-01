@@ -15,11 +15,11 @@ const createPayment = async (req, res, next) => {
   }
 };
 
-const getPaymentsByOrderId = async (req, res, next) => {
+// FIXED: Singular name, removed pagination params
+const getPaymentByOrderId = async (req, res, next) => {
   try {
     const { orderId } = req.params;
-    const { status, page, limit } = req.query;
-    const result = await paymentService.getPaymentsByOrderId(orderId, { status, page, limit });
+    const result = await paymentService.getPaymentByOrderId(orderId);
     res.status(StatusCodes.OK).json({
       success: true,
       data: result
@@ -79,6 +79,22 @@ const updatePaymentStatus = async (req, res, next) => {
   }
 };
 
+const updatePaymentMethod = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { method } = req.body;
+    const userRole = req.jwtDecoded.role;
+    const result = await paymentService.updatePaymentMethod(id, method, userRole);
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: 'Payment method updated successfully.',
+      data: result
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const deletePayment = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -115,10 +131,11 @@ const handleWebhook = async (req, res, next) => {
 
 export const paymentController = {
   createPayment,
-  getPaymentsByOrderId,
+  getPaymentByOrderId,  // FIXED: Singular
   getPaymentById,
   getAllPayments,
   updatePaymentStatus,
+  updatePaymentMethod,
   deletePayment,
   handleWebhook
 };

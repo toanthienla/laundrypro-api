@@ -2,7 +2,8 @@ import { StatusCodes } from 'http-status-codes';
 import mongoose from 'mongoose';
 import { Order, ORDER_STATUS } from '~/models/orderModel';
 import { OrderItem } from '~/models/orderItemModel';
-import { User, USER_ROLES } from '~/models/userModel';
+import { User } from '~/models/userModel';
+import { Payment, PAYMENT_STATUS } from '~/models/paymentModel';
 import { Service } from '~/models/serviceModel';
 import ApiError from '~/utils/ApiError';
 
@@ -12,9 +13,7 @@ const getMyOrders = async (userId, query = {}) => {
   const { status, page = 1, limit = 10 } = query;
   const filter = { customerId: userId };
 
-  if (status) {
-    filter.status = status;
-  }
+  if (status) filter.status = status;
 
   const skip = (parseInt(page) - 1) * parseInt(limit);
 
@@ -27,15 +26,20 @@ const getMyOrders = async (userId, query = {}) => {
     Order.countDocuments(filter)
   ]);
 
-  const ordersWithItems = await Promise.all(
+  const ordersWithDetails = await Promise.all(
     orders.map(async (order) => {
       const orderItems = await OrderItem.findByOrderId(order._id);
-      return { ...order.toObject(), orderItems };
+      const payment = await Payment.findByOrderId(order._id);
+      return {
+        ...order.toObject(),
+        orderItems,
+        payment: payment || null
+      };
     })
   );
 
   return {
-    orders: ordersWithItems,
+    orders: ordersWithDetails,
     pagination: {
       page: parseInt(page),
       limit: parseInt(limit),
@@ -54,8 +58,13 @@ const getMyOrderById = async (orderId, userId) => {
   }
 
   const orderItems = await OrderItem.findByOrderId(orderId);
+  const payment = await Payment.findByOrderId(orderId);
 
-  return { ...order.toObject(), orderItems };
+  return {
+    ...order.toObject(),
+    orderItems,
+    payment: payment || null
+  };
 };
 
 // ==================== STAFF/ADMIN ====================
@@ -63,10 +72,8 @@ const getMyOrderById = async (orderId, userId) => {
 const createOrder = async (reqBody, createdByUserId) => {
   const { customerPhone, customerName, customerAddress, items, note } = reqBody;
 
-  // Find or create customer
   const customer = await User.findOrCreateCustomer(customerPhone, customerName, customerAddress);
 
-  // Validate and prepare order items
   const orderItems = [];
   let totalPrice = 0;
 
@@ -81,7 +88,6 @@ const createOrder = async (reqBody, createdByUserId) => {
       throw new ApiError(StatusCodes.BAD_REQUEST, `Service is not active: ${service.name}`);
     }
 
-    // Use service.price as default if unitPrice not provided
     const unitPrice = item.unitPrice !== undefined ? item.unitPrice : service.price;
     const itemTotal = item.quantity * unitPrice;
 
@@ -89,10 +95,10 @@ const createOrder = async (reqBody, createdByUserId) => {
       serviceId: service._id,
       serviceName: service.name,
       serviceCategory: service.category,
-      servicePrice: service.price, // Snapshot original price
+      servicePrice: service.price,
       serviceUnit: service.unit,
       quantity: item.quantity,
-      unitPrice: unitPrice, // Actual charged price
+      unitPrice: unitPrice,
       totalPrice: itemTotal,
       note: item.note || null
     });
@@ -100,7 +106,6 @@ const createOrder = async (reqBody, createdByUserId) => {
     totalPrice += itemTotal;
   }
 
-  // Create order
   const order = await Order.create({
     customerId: customer._id,
     createdBy: createdByUserId,
@@ -109,7 +114,6 @@ const createOrder = async (reqBody, createdByUserId) => {
     note: note || null
   });
 
-  // Create order items
   for (const itemData of orderItems) {
     await OrderItem.createItem({
       orderId: order._id,
@@ -117,7 +121,6 @@ const createOrder = async (reqBody, createdByUserId) => {
     });
   }
 
-  // Get complete order with items
   const completeOrder = await Order.findById(order._id)
     .populate('customerId', 'phone name address')
     .populate('createdBy', 'phone name');
@@ -126,7 +129,8 @@ const createOrder = async (reqBody, createdByUserId) => {
 
   return {
     ...completeOrder.toObject(),
-    orderItems: savedItems
+    orderItems: savedItems,
+    payment: null
   };
 };
 
@@ -149,9 +153,7 @@ const getOrdersByCustomerPhone = async (phone, query = {}) => {
   }
 
   const filter = { customerId: customer._id };
-  if (status) {
-    filter.status = status;
-  }
+  if (status) filter.status = status;
 
   const skip = (parseInt(page) - 1) * parseInt(limit);
 
@@ -164,16 +166,21 @@ const getOrdersByCustomerPhone = async (phone, query = {}) => {
     Order.countDocuments(filter)
   ]);
 
-  const ordersWithItems = await Promise.all(
+  const ordersWithDetails = await Promise.all(
     orders.map(async (order) => {
       const orderItems = await OrderItem.findByOrderId(order._id);
-      return { ...order.toObject(), orderItems };
+      const payment = await Payment.findByOrderId(order._id);
+      return {
+        ...order.toObject(),
+        orderItems,
+        payment: payment || null
+      };
     })
   );
 
   return {
     customer,
-    orders: ordersWithItems,
+    orders: ordersWithDetails,
     pagination: {
       page: parseInt(page),
       limit: parseInt(limit),
@@ -221,15 +228,20 @@ const getAllOrders = async (query = {}) => {
     Order.countDocuments(filter)
   ]);
 
-  const ordersWithItems = await Promise.all(
+  const ordersWithDetails = await Promise.all(
     orders.map(async (order) => {
       const orderItems = await OrderItem.findByOrderId(order._id);
-      return { ...order.toObject(), orderItems };
+      const payment = await Payment.findByOrderId(order._id);
+      return {
+        ...order.toObject(),
+        orderItems,
+        payment: payment || null
+      };
     })
   );
 
   return {
-    orders: ordersWithItems,
+    orders: ordersWithDetails,
     pagination: {
       page: parseInt(page),
       limit: parseInt(limit),
@@ -249,8 +261,13 @@ const getOrderById = async (orderId) => {
   }
 
   const orderItems = await OrderItem.findByOrderId(orderId);
+  const payment = await Payment.findByOrderId(orderId);
 
-  return { ...order.toObject(), orderItems };
+  return {
+    ...order.toObject(),
+    orderItems,
+    payment: payment || null
+  };
 };
 
 const updateOrder = async (orderId, reqBody, userRole) => {
@@ -260,7 +277,6 @@ const updateOrder = async (orderId, reqBody, userRole) => {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Order not found.');
   }
 
-  // Staff can only update pending orders
   if (userRole !== 'admin' && order.status === ORDER_STATUS.COMPLETED) {
     throw new ApiError(StatusCodes.FORBIDDEN, 'Only admin can modify completed orders.');
   }
@@ -270,8 +286,13 @@ const updateOrder = async (orderId, reqBody, userRole) => {
 
   const updatedOrder = await Order.updateOrder(orderId, updateData);
   const orderItems = await OrderItem.findByOrderId(orderId);
+  const payment = await Payment.findByOrderId(orderId);
 
-  return { ...updatedOrder.toObject(), orderItems };
+  return {
+    ...updatedOrder.toObject(),
+    orderItems,
+    payment: payment || null
+  };
 };
 
 const updateOrderStatus = async (orderId, status, userRole) => {
@@ -281,23 +302,36 @@ const updateOrderStatus = async (orderId, status, userRole) => {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Order not found.');
   }
 
-  // Staff can only update pending orders
   if (userRole !== 'admin' && order.status === ORDER_STATUS.COMPLETED) {
     throw new ApiError(StatusCodes.FORBIDDEN, 'Only admin can modify completed orders.');
   }
 
-  // If marking as completed, ensure payment is fully paid
   if (status === ORDER_STATUS.COMPLETED) {
-    if (order.paidAmount < order.totalPrice) {
+    const payment = await Payment.findByOrderId(orderId);
+
+    if (!payment) {
       throw new ApiError(
         StatusCodes.BAD_REQUEST,
-        'Order cannot be completed. Payment is not fully paid.'
+        'Order cannot be completed. No payment found.'
+      );
+    }
+
+    if (payment.status !== PAYMENT_STATUS.PAID) {
+      throw new ApiError(
+        StatusCodes.BAD_REQUEST,
+        `Order cannot be completed. Payment status: ${payment.status}.`
+      );
+    }
+
+    if (payment.amount < order.totalPrice) {
+      throw new ApiError(
+        StatusCodes.BAD_REQUEST,
+        `Order cannot be completed. Payment amount (${payment.amount}) is less than total (${order.totalPrice}).`
       );
     }
   }
 
   const updateData = { status };
-
   if (status === ORDER_STATUS.COMPLETED) {
     updateData.completedAt = new Date();
   } else {
@@ -306,27 +340,50 @@ const updateOrderStatus = async (orderId, status, userRole) => {
 
   const updatedOrder = await Order.updateOrder(orderId, updateData);
   const orderItems = await OrderItem.findByOrderId(orderId);
+  const payment = await Payment.findByOrderId(orderId);
 
-  return { ...updatedOrder.toObject(), orderItems };
+  return {
+    ...updatedOrder.toObject(),
+    orderItems,
+    payment: payment || null
+  };
 };
 
 const deleteOrder = async (orderId, userRole) => {
-  const order = await Order.findById(orderId);
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-  if (!order) {
-    throw new ApiError(StatusCodes.NOT_FOUND, 'Order not found.');
+  try {
+    const order = await Order.findById(orderId).session(session);
+
+    if (!order) {
+      throw new ApiError(StatusCodes.NOT_FOUND, 'Order not found.');
+    }
+
+    if (userRole !== 'admin' && order.status === ORDER_STATUS.COMPLETED) {
+      throw new ApiError(StatusCodes.FORBIDDEN, 'Only admin can delete completed orders.');
+    }
+
+    const payment = await Payment.findByOrderId(orderId).session(session);
+
+    if (payment && payment.status === PAYMENT_STATUS.PAID && userRole !== 'admin') {
+      throw new ApiError(StatusCodes.FORBIDDEN, 'Cannot delete order with paid payment. Only admin can.');
+    }
+
+    if (payment) {
+      await Payment.deleteByOrderId(orderId, session);
+    }
+
+    await OrderItem.deleteByOrderId(orderId, session);
+    await Order.deleteOrder(orderId, session);
+
+    await session.commitTransaction();
+  } catch (error) {
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    session.endSession();
   }
-
-  // Staff can only delete pending orders
-  if (userRole !== 'admin' && order.status === ORDER_STATUS.COMPLETED) {
-    throw new ApiError(StatusCodes.FORBIDDEN, 'Only admin can delete completed orders.');
-  }
-
-  // Delete order items first
-  await OrderItem.deleteByOrderId(orderId);
-
-  // Delete order
-  await Order.deleteOrder(orderId);
 };
 
 const getOrderStats = async (query = {}) => {
@@ -339,7 +396,6 @@ const getOrderStats = async (query = {}) => {
     if (endDate) matchFilter.createdAt.$lte = new Date(endDate + 'T23:59:59.999Z');
   }
 
-  // Stats by status
   const byStatus = await Order.aggregate([
     { $match: matchFilter },
     {
@@ -351,7 +407,6 @@ const getOrderStats = async (query = {}) => {
     }
   ]);
 
-  // Total revenue (completed orders only)
   const completedFilter = { ...matchFilter, status: ORDER_STATUS.COMPLETED };
   const revenueResult = await Order.aggregate([
     { $match: completedFilter },
@@ -367,7 +422,6 @@ const getOrderStats = async (query = {}) => {
   const revenue = revenueResult.length > 0 ? revenueResult[0] : { totalRevenue: 0, totalOrders: 0 };
   revenue.avgOrderValue = revenue.totalOrders > 0 ? revenue.totalRevenue / revenue.totalOrders : 0;
 
-  // Daily stats
   const daily = await Order.aggregate([
     { $match: completedFilter },
     {
@@ -381,7 +435,6 @@ const getOrderStats = async (query = {}) => {
     { $limit: 30 }
   ]);
 
-  // Top customers
   const topCustomers = await Order.aggregate([
     { $match: completedFilter },
     {
@@ -444,7 +497,6 @@ const addOrderItem = async (orderId, reqBody, userRole) => {
     throw new ApiError(StatusCodes.BAD_REQUEST, 'Service is not active.');
   }
 
-  // Use service.price as default if unitPrice not provided
   const unitPrice = reqBody.unitPrice !== undefined ? reqBody.unitPrice : service.price;
 
   const itemData = {
@@ -462,11 +514,9 @@ const addOrderItem = async (orderId, reqBody, userRole) => {
 
   await OrderItem.createItem(itemData);
 
-  // Recalculate order total
   const newTotal = await OrderItem.calculateOrderTotal(orderId);
   await Order.updateOrder(orderId, { totalPrice: newTotal });
 
-  // Return updated order
   return getOrderById(orderId);
 };
 
@@ -494,11 +544,9 @@ const updateOrderItem = async (orderId, itemId, reqBody, userRole) => {
 
   await OrderItem.updateItem(itemId, updateData);
 
-  // Recalculate order total
   const newTotal = await OrderItem.calculateOrderTotal(orderId);
   await Order.updateOrder(orderId, { totalPrice: newTotal });
 
-  // Return updated order
   return getOrderById(orderId);
 };
 
@@ -521,19 +569,15 @@ const deleteOrderItem = async (orderId, itemId, userRole) => {
 
   await OrderItem.deleteItem(itemId);
 
-  // Recalculate order total
   const newTotal = await OrderItem.calculateOrderTotal(orderId);
   await Order.updateOrder(orderId, { totalPrice: newTotal });
 
-  // Return updated order
   return getOrderById(orderId);
 };
 
 export const orderService = {
-  // Customer
   getMyOrders,
   getMyOrderById,
-  // Staff/Admin
   createOrder,
   getOrdersByCustomerPhone,
   getAllOrders,
@@ -542,7 +586,6 @@ export const orderService = {
   updateOrderStatus,
   deleteOrder,
   getOrderStats,
-  // Order Items
   addOrderItem,
   updateOrderItem,
   deleteOrderItem

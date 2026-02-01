@@ -2,29 +2,38 @@
  * @swagger
  * tags:
  *   - name: Payments
- *     description: Payment processing and management
+ *     description: Payment processing and management, Clean 1-1 with Order, orderId unique
  */
 
 /**
  * @swagger
  * components:
+ *   securitySchemes:
+ *     cookieAuth:
+ *       type: apiKey
+ *       in: cookie
+ *       name: accessToken
+ *
  *   schemas:
  *     Payment:
  *       type: object
  *       properties:
  *         _id:
  *           type: string
+ *           example: "65b1234567890abcdef12348"
  *         orderId:
  *           type: string
- *           description: Reference to order
+ *           description: Reference to order. Constraint. Unique index enforces 1-1 relationship, One Order equals One Payment.
+ *           example: "65b1234567890abcdef12346"
  *         method:
  *           type: string
  *           enum: [cash, momo, vnpay, bank]
  *           example: "cash"
  *         amount:
  *           type: number
- *           description: Payment amount in VND
+ *           description: Payment amount in VND, must equal order total exactly
  *           example: 150000
+ *           minimum: 0
  *         status:
  *           type: string
  *           enum: [pending, paid, failed, refunded]
@@ -33,10 +42,12 @@
  *           type: string
  *           description: Transaction reference from payment gateway
  *           example: "MOMO250129123456"
+ *           nullable: true
  *         paidAt:
  *           type: string
  *           format: date-time
  *           description: When payment was confirmed
+ *           nullable: true
  *         createdAt:
  *           type: string
  *           format: date-time
@@ -44,6 +55,8 @@
  *           type: string
  *           format: date-time
  */
+
+// Removed PaymentWithOrder inline object to keep only 3 schemas total as requested
 
 // ==================== PAYMENTS (Staff/Admin) ====================
 
@@ -60,6 +73,7 @@
  *         name: orderId
  *         schema:
  *           type: string
+ *         description: Filter by specific order, returns 0 or 1 result due to 1-1 unique constraint
  *       - in: query
  *         name: status
  *         schema:
@@ -84,10 +98,12 @@
  *         name: page
  *         schema:
  *           type: integer
+ *           default: 1
  *       - in: query
  *         name: limit
  *         schema:
  *           type: integer
+ *           default: 10
  *     responses:
  *       200:
  *         description: List of payments with pagination
@@ -122,7 +138,9 @@
  *     tags: [Payments]
  *     security:
  *       - cookieAuth: []
- *     description: Create a payment record for an order
+ *     description: |
+ *       Create a single payment for an order, Clean 1-1 relationship.
+ *       Constraints. Order must not have existing payment, enforced by unique index on orderId. Payment amount must equal order total exactly. Returns 409 Conflict if order already has a payment.
  *     requestBody:
  *       required: true
  *       content:
@@ -136,22 +154,26 @@
  *             properties:
  *               orderId:
  *                 type: string
- *                 example: "65b12345..."
+ *                 description: Order to pay for, must not have existing payment due to 1-1 constraint
+ *                 example: "65b1234567890abcdef12346"
  *               method:
  *                 type: string
  *                 enum: [cash, momo, vnpay, bank]
  *                 example: "cash"
  *               amount:
  *                 type: number
+ *                 description: Must equal order totalPrice exactly, 1-1 payment
  *                 example: 150000
  *               transactionRef:
  *                 type: string
+ *                 maxLength: 100
  *               markAsPaid:
  *                 type: boolean
  *                 default: false
+ *                 description: For cash payments, mark as paid immediately
  *     responses:
  *       201:
- *         description: Payment created
+ *         description: Payment created, 1-1 link established via orderId
  *         content:
  *           application/json:
  *             schema:
@@ -159,8 +181,19 @@
  *               properties:
  *                 success:
  *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                   example: "Payment created successfully."
  *                 data:
  *                   $ref: '#/components/schemas/Payment'
+ *       400:
+ *         description: Amount does not match order total
+ *       403:
+ *         description: Staff cannot create payment for completed order
+ *       404:
+ *         description: Order not found
+ *       409:
+ *         description: Order already has a payment, 1-1 constraint violation
  */
 
 /**
@@ -197,6 +230,8 @@
  *     tags: [Payments]
  *     security:
  *       - cookieAuth: []
+ *     description: |
+ *       Delete payment. In Clean 1-1 design, Order does not store paymentId reference, so no need to update Order document. Order will simply return payment as null on next fetch.
  *     parameters:
  *       - in: path
  *         name: id
@@ -206,13 +241,33 @@
  *     responses:
  *       200:
  *         description: Payment deleted
- *
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                   example: "Payment deleted successfully."
+ *       403:
+ *         description: Only admin can delete paid payments
+ *       404:
+ *         description: Payment not found
+ */
+
+/**
+ * @swagger
  * /v1/payments/{id}/status:
  *   patch:
  *     summary: Update payment status (Staff/Admin)
  *     tags: [Payments]
  *     security:
  *       - cookieAuth: []
+ *     description: |
+ *       Update payment status with automatic order completion.
+ *       Setting status to paid automatically completes the associated order.
  *     parameters:
  *       - in: path
  *         name: id
@@ -233,6 +288,7 @@
  *                 enum: [pending, paid, failed, refunded]
  *               transactionRef:
  *                 type: string
+ *                 maxLength: 100
  *     responses:
  *       200:
  *         description: Status updated
@@ -243,40 +299,146 @@
  *               properties:
  *                 success:
  *                   type: boolean
+ *                 message:
+ *                   type: string
  *                 data:
  *                   $ref: '#/components/schemas/Payment'
+ *       400:
+ *         description: Invalid status transition
+ *       403:
+ *         description: Only admin can process refunds
+ *       404:
+ *         description: Payment not found
+ */
+
+/**
+ * @swagger
+ * /v1/payments/{id}/method:
+ *   patch:
+ *     summary: Update payment method (Staff/Admin)
+ *     tags: [Payments]
+ *     security:
+ *       - cookieAuth: []
+ *     description: |
+ *       Update payment method for a pending payment.
+ *       Only allowed when payment status is pending. Cannot change method for paid, failed, or refunded payments.
+ *       Common use case: Switching from bank transfer to cash, or MoMo to VNPay before payment is processed.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Payment ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - method
+ *             properties:
+ *               method:
+ *                 type: string
+ *                 enum: [cash, momo, vnpay, bank]
+ *                 description: |
+ *                   New payment method. Must be one of the supported methods.
+ *                   Cannot be changed if payment is already processed.
+ *                 example: "momo"
+ *     responses:
+ *       200:
+ *         description: Payment method updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Payment method updated successfully."
+ *                 data:
+ *                   $ref: '#/components/schemas/Payment'
+ *       400:
+ *         description: |
+ *           Bad Request - Possible reasons:
+ *           - Invalid payment method
+ *           - Payment is not pending (cannot modify paid/failed/refunded payments)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 statusCode:
+ *                   type: integer
+ *                   example: 400
+ *                 message:
+ *                   type: string
+ *                   example: "Cannot update method for paid payment. Only pending payments can be modified."
+ *       403:
+ *         description: Forbidden - Only Staff or Admin can update payment method
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 statusCode:
+ *                   type: integer
+ *                   example: 403
+ *                 message:
+ *                   type: string
+ *                   example: "Staff or Admin access required."
+ *       404:
+ *         description: Payment not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 statusCode:
+ *                   type: integer
+ *                   example: 404
+ *                 message:
+ *                   type: string
+ *                   example: "Payment not found."
+ *       422:
+ *         description: Validation failed - Invalid method format
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 statusCode:
+ *                   type: integer
+ *                   example: 422
+ *                 message:
+ *                   type: string
+ *                   example: "Method must be one of: cash, momo, vnpay, bank"
  */
 
 /**
  * @swagger
  * /v1/payments/by-order/{orderId}:
  *   get:
- *     summary: Get payments by order ID
+ *     summary: Get payment by order ID, Clean 1-1
  *     tags: [Payments]
  *     security:
  *       - cookieAuth: []
+ *     description: |
+ *       Returns order summary with associated payment, queried by unique orderId.
+ *       Due to 1-1 constraint, returns single payment object or null.
  *     parameters:
  *       - in: path
  *         name: orderId
  *         required: true
  *         schema:
  *           type: string
- *       - in: query
- *         name: status
- *         schema:
- *           type: string
- *           enum: [pending, paid, failed, refunded]
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
  *     responses:
  *       200:
- *         description: Payments for the order
+ *         description: Payment found or null
  *         content:
  *           application/json:
  *             schema:
@@ -287,32 +449,21 @@
  *                 data:
  *                   type: object
  *                   properties:
- *                     payments:
- *                       type: array
- *                       items:
- *                         $ref: '#/components/schemas/Payment'
- *                     orderSummary:
+ *                     order:
  *                       type: object
  *                       properties:
+ *                         _id:
+ *                           type: string
  *                         totalPrice:
  *                           type: number
- *                         totalPaid:
- *                           type: number
- *                         remaining:
- *                           type: number
- *                         isFullyPaid:
- *                           type: boolean
- *                     pagination:
- *                       type: object
- *                       properties:
- *                         page:
- *                           type: integer
- *                         limit:
- *                           type: integer
- *                         total:
- *                           type: integer
- *                         totalPages:
- *                           type: integer
+ *                         status:
+ *                           type: string
+ *                     payment:
+ *                       $ref: '#/components/schemas/Payment'
+ *                       nullable: true
+ *                       description: Single payment or null, Clean 1-1
+ *       404:
+ *         description: Order not found
  */
 
 // ==================== WEBHOOKS (Public) ====================
@@ -323,7 +474,9 @@
  *   post:
  *     summary: MoMo payment webhook
  *     tags: [Payments]
- *     description: Public endpoint for MoMo IPN
+ *     description: |
+ *       Public endpoint for MoMo IPN.
+ *       Returns 200 immediately, processes asynchronously to avoid gateway timeout.
  *     requestBody:
  *       required: true
  *       content:
@@ -335,20 +488,15 @@
  *                 type: string
  *               orderId:
  *                 type: string
- *               requestId:
- *                 type: string
- *               amount:
- *                 type: number
  *               resultCode:
  *                 type: integer
- *                 description: Zero means success
  *               message:
  *                 type: string
  *               signature:
  *                 type: string
  *     responses:
  *       200:
- *         description: Webhook processed
+ *         description: Webhook received, processed asynchronously
  */
 
 /**
@@ -357,7 +505,9 @@
  *   post:
  *     summary: VNPay payment webhook
  *     tags: [Payments]
- *     description: Public endpoint for VNPay IPN
+ *     description: |
+ *       Public endpoint for VNPay IPN.
+ *       Returns 200 immediately, processes asynchronously.
  *     requestBody:
  *       required: true
  *       content:
@@ -371,19 +521,9 @@
  *                 type: number
  *               vnp_ResponseCode:
  *                 type: string
- *                 description: Double zero means success
  *               vnp_SecureHash:
  *                 type: string
  *     responses:
  *       200:
- *         description: Webhook processed
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 RspCode:
- *                   type: string
- *                 Message:
- *                   type: string
+ *         description: Webhook received, processed asynchronously
  */

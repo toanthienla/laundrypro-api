@@ -2,7 +2,7 @@
  * @swagger
  * tags:
  *   - name: Orders
- *     description: Order management
+ *     description: Order management, Clean 1-1 with Payment
  */
 
 /**
@@ -14,10 +14,13 @@
  *       properties:
  *         _id:
  *           type: string
+ *           example: "65b1234567890abcdef12345"
  *         orderId:
  *           type: string
+ *           example: "65b1234567890abcdef12346"
  *         serviceId:
  *           type: string
+ *           example: "65b1234567890abcdef12347"
  *         serviceName:
  *           type: string
  *           example: "Giặt thường"
@@ -26,24 +29,27 @@
  *           example: "Giặt sấy"
  *         servicePrice:
  *           type: number
- *           description: Original service price (snapshot)
+ *           description: Original service price, snapshot at order time
  *           example: 15000
  *         serviceUnit:
  *           type: string
  *           example: "kg"
  *         quantity:
  *           type: number
+ *           minimum: 1
  *           example: 5
  *         unitPrice:
  *           type: number
  *           description: Actual price charged
  *           example: 15000
+ *           minimum: 0
  *         totalPrice:
  *           type: number
- *           description: quantity × unitPrice
+ *           description: quantity times unitPrice
  *           example: 75000
  *         note:
  *           type: string
+ *           nullable: true
  *         createdAt:
  *           type: string
  *           format: date-time
@@ -56,25 +62,60 @@
  *       properties:
  *         _id:
  *           type: string
+ *           example: "65b1234567890abcdef12346"
  *         customerId:
- *           type: string
+ *           type: object
+ *           description: Populated customer info
+ *           properties:
+ *             _id:
+ *               type: string
+ *             phone:
+ *               type: string
+ *               example: "+84901234567"
+ *             name:
+ *               type: string
+ *               example: "Nguyen Van A"
+ *             address:
+ *               type: string
+ *             email:
+ *               type: string
  *         createdBy:
- *           type: string
+ *           type: object
+ *           description: Staff who created the order
+ *           properties:
+ *             _id:
+ *               type: string
+ *             phone:
+ *               type: string
+ *               example: "+84909998888"
+ *             name:
+ *               type: string
+ *               example: "Staff Nguyen"
  *         status:
  *           type: string
  *           enum: [pending, completed]
+ *           example: "pending"
  *         completedAt:
  *           type: string
  *           format: date-time
+ *           nullable: true
+ *           example: "2026-01-31T14:00:00.000Z"
  *         totalPrice:
  *           type: number
  *           example: 150000
- *         note:
- *           type: string
+ *           minimum: 0
+ *         payment:
+ *           $ref: '#/components/schemas/Payment'
+ *           description: Payment object queried separately from Payment collection, Clean 1-1. Null if no payment exists for this order.
+ *           nullable: true
  *         orderItems:
  *           type: array
  *           items:
  *             $ref: '#/components/schemas/OrderItem'
+ *         note:
+ *           type: string
+ *           nullable: true
+ *           example: "Giao hàng nhanh giúp mình"
  *         createdAt:
  *           type: string
  *           format: date-time
@@ -93,6 +134,7 @@
  *     tags: [Orders]
  *     security:
  *       - cookieAuth: []
+ *     description: Returns orders for the authenticated customer with items and payment info. Payment is queried separately from Payment collection, Clean 1-1 design.
  *     parameters:
  *       - in: query
  *         name: status
@@ -103,13 +145,40 @@
  *         name: page
  *         schema:
  *           type: integer
+ *           default: 1
  *       - in: query
  *         name: limit
  *         schema:
  *           type: integer
+ *           default: 10
  *     responses:
  *       200:
- *         description: List of my orders
+ *         description: List of orders with payment info, queried separately
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     orders:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/Order'
+ *                     pagination:
+ *                       type: object
+ *                       properties:
+ *                         page:
+ *                           type: integer
+ *                         limit:
+ *                           type: integer
+ *                         total:
+ *                           type: integer
+ *                         totalPages:
+ *                           type: integer
  *       401:
  *         description: Unauthorized
  */
@@ -122,6 +191,7 @@
  *     tags: [Orders]
  *     security:
  *       - cookieAuth: []
+ *     description: Returns single order with items and payment. Payment is queried separately from Payment collection.
  *     parameters:
  *       - in: path
  *         name: id
@@ -130,7 +200,16 @@
  *           type: string
  *     responses:
  *       200:
- *         description: Order details
+ *         description: Order details with payment, queried separately
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   $ref: '#/components/schemas/Order'
  *       404:
  *         description: Not found
  */
@@ -145,6 +224,7 @@
  *     tags: [Orders]
  *     security:
  *       - cookieAuth: []
+ *     description: Returns all orders with customer info, items, and payment, queried separately.
  *     parameters:
  *       - in: query
  *         name: status
@@ -169,13 +249,11 @@
  *         schema:
  *           type: string
  *           format: date
- *         example: "2026-01-01"
  *       - in: query
  *         name: endDate
  *         schema:
  *           type: string
  *           format: date
- *         example: "2026-01-31"
  *       - in: query
  *         name: page
  *         schema:
@@ -186,7 +264,23 @@
  *           type: integer
  *     responses:
  *       200:
- *         description: List of orders
+ *         description: List of orders with payments
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     orders:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/Order'
+ *                     pagination:
+ *                       type: object
  *       403:
  *         description: Staff/Admin required
  *
@@ -196,10 +290,9 @@
  *     security:
  *       - cookieAuth: []
  *     description: |
- *       Create order for customer. If customer doesn't exist, a new customer will be created.
- *
- *       - `unitPrice` is optional. If not provided, uses `service.price`
- *       - `servicePrice` is automatically saved as snapshot of original price
+ *       Create order for customer. Creates customer if not exists.
+ *       Note: Payment is created separately via /v1/payments (Clean 1-1).
+ *       New orders return payment as null.
  *     requestBody:
  *       required: true
  *       content:
@@ -219,7 +312,6 @@
  *                 example: "Nguyen Van A"
  *               customerAddress:
  *                 type: string
- *                 example: "123 Nguyen Hue, Q1, HCM"
  *               items:
  *                 type: array
  *                 minItems: 1
@@ -234,18 +326,26 @@
  *                     quantity:
  *                       type: number
  *                       minimum: 1
- *                       example: 5
  *                     unitPrice:
  *                       type: number
- *                       description: Optional. Uses service.price if not provided
- *                       example: 15000
  *                     note:
  *                       type: string
  *               note:
  *                 type: string
  *     responses:
  *       201:
- *         description: Order created
+ *         description: Order created, payment is null
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   $ref: '#/components/schemas/Order'
  *       400:
  *         description: Service not active
  *       403:
@@ -284,7 +384,25 @@
  *           type: integer
  *     responses:
  *       200:
- *         description: Customer and orders
+ *         description: Customer and orders with payments
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     customer:
+ *                       type: object
+ *                     orders:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/Order'
+ *                     pagination:
+ *                       type: object
  *       403:
  *         description: Staff/Admin required
  */
@@ -303,13 +421,11 @@
  *         schema:
  *           type: string
  *           format: date
- *         example: "2026-01-01"
  *       - in: query
  *         name: endDate
  *         schema:
  *           type: string
  *           format: date
- *         example: "2026-01-31"
  *     responses:
  *       200:
  *         description: Order statistics
@@ -325,6 +441,7 @@
  *     tags: [Orders]
  *     security:
  *       - cookieAuth: []
+ *     description: Returns order with items and payment, queried separately from Payment collection.
  *     parameters:
  *       - in: path
  *         name: id
@@ -333,7 +450,16 @@
  *           type: string
  *     responses:
  *       200:
- *         description: Order details
+ *         description: Order details with payment info
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   $ref: '#/components/schemas/Order'
  *       404:
  *         description: Not found
  *
@@ -342,10 +468,6 @@
  *     tags: [Orders]
  *     security:
  *       - cookieAuth: []
- *     description: |
- *       **Access Control:**
- *       - Staff: Can only update `pending` orders
- *       - Admin: Can update any order
  *     parameters:
  *       - in: path
  *         name: id
@@ -363,6 +485,17 @@
  *     responses:
  *       200:
  *         description: Order updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   $ref: '#/components/schemas/Order'
  *       403:
  *         description: Staff can only update pending orders
  *       404:
@@ -373,10 +506,7 @@
  *     tags: [Orders]
  *     security:
  *       - cookieAuth: []
- *     description: |
- *       **Access Control:**
- *       - Staff: Can only delete `pending` orders
- *       - Admin: Can delete any order
+ *     description: Cascade deletes order items and associated payment, Clean 1-1, payment queried by orderId.
  *     parameters:
  *       - in: path
  *         name: id
@@ -385,9 +515,9 @@
  *           type: string
  *     responses:
  *       200:
- *         description: Order deleted
+ *         description: Order deleted and payment if existed
  *       403:
- *         description: Staff can only delete pending orders
+ *         description: Staff cannot delete order with paid payment
  *       404:
  *         description: Not found
  */
@@ -401,13 +531,8 @@
  *     security:
  *       - cookieAuth: []
  *     description: |
- *       **Access Control:**
- *       - Staff: Can only update `pending` → `completed`
- *       - Admin: Can update any status
- *
- *       **Auto fields:**
- *       - `completed` → sets `completedAt` to current time
- *       - `pending` → clears `completedAt`
+ *       Completion Rule. Order can only be completed if payment exists in Payment collection and status is paid.
+ *       Payment is queried by orderId, Clean 1-1.
  *     parameters:
  *       - in: path
  *         name: id
@@ -429,10 +554,21 @@
  *     responses:
  *       200:
  *         description: Status updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   $ref: '#/components/schemas/Order'
+ *       400:
+ *         description: Cannot complete, payment not found or not paid
  *       403:
  *         description: Staff can only update pending orders
- *       404:
- *         description: Not found
  */
 
 // ==================== ORDER ITEMS ====================
@@ -445,14 +581,6 @@
  *     tags: [Orders]
  *     security:
  *       - cookieAuth: []
- *     description: |
- *       **Access Control:**
- *       - Staff: Can only add items to `pending` orders
- *       - Admin: Can add items to any order
- *       
- *       **Pricing:**
- *       - `unitPrice` is optional. If not provided, uses `service.price`
- *       - Order total is automatically recalculated
  *     parameters:
  *       - in: path
  *         name: orderId
@@ -474,16 +602,24 @@
  *               quantity:
  *                 type: number
  *                 minimum: 1
- *                 example: 3
  *               unitPrice:
  *                 type: number
- *                 description: Optional. Uses service.price if not provided
- *                 example: 15000
  *               note:
  *                 type: string
  *     responses:
- *       200:
- *         description: Item added, returns updated order
+ *       201:
+ *         description: Item added, returns updated order with payment
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   $ref: '#/components/schemas/Order'
  *       400:
  *         description: Service not active
  *       403:
@@ -500,12 +636,6 @@
  *     tags: [Orders]
  *     security:
  *       - cookieAuth: []
- *     description: |
- *       **Access Control:**
- *       - Staff: Can only update items in `pending` orders
- *       - Admin: Can update items in any order
- *       
- *       Order total is automatically recalculated.
  *     parameters:
  *       - in: path
  *         name: orderId
@@ -533,7 +663,18 @@
  *                 type: string
  *     responses:
  *       200:
- *         description: Item updated, returns updated order
+ *         description: Item updated, returns updated order with payment
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   $ref: '#/components/schemas/Order'
  *       403:
  *         description: Staff can only modify pending orders
  *       404:
@@ -544,12 +685,6 @@
  *     tags: [Orders]
  *     security:
  *       - cookieAuth: []
- *     description: |
- *       **Access Control:**
- *       - Staff: Can only delete items from `pending` orders
- *       - Admin: Can delete items from any order
- *       
- *       Order total is automatically recalculated.
  *     parameters:
  *       - in: path
  *         name: orderId
@@ -563,7 +698,18 @@
  *           type: string
  *     responses:
  *       200:
- *         description: Item deleted, returns updated order
+ *         description: Item deleted, returns updated order with payment
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   $ref: '#/components/schemas/Order'
  *       403:
  *         description: Staff can only modify pending orders
  *       404:

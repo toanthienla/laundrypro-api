@@ -69,6 +69,25 @@ const updatePaymentStatus = async (req, res, next) => {
   }
 };
 
+const updatePaymentMethod = async (req, res, next) => {
+  const schema = Joi.object({
+    method: Joi.string()
+      .valid(...Object.values(PAYMENT_METHOD))
+      .required()
+      .messages({
+        'any.only': `Method must be one of: ${Object.values(PAYMENT_METHOD).join(', ')}`,
+        'any.required': 'Payment method is required'
+      })
+  });
+
+  try {
+    await schema.validateAsync(req.body, { abortEarly: false });
+    next();
+  } catch (error) {
+    next(new ApiError(StatusCodes.UNPROCESSABLE_ENTITY, error.message));
+  }
+};
+
 const validatePaymentId = async (req, res, next) => {
   const schema = Joi.object({
     id: Joi.string()
@@ -144,6 +163,7 @@ const webhook = async (req, res, next) => {
 export const paymentValidation = {
   createPayment,
   updatePaymentStatus,
+  updatePaymentMethod,
   validatePaymentId,
   validateOrderId,
   getAllPayments,

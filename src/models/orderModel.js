@@ -5,7 +5,7 @@ const ORDER_STATUS = {
   COMPLETED: 'completed'
 };
 
-const INVALID_UPDATE_FIELDS = ['_id', 'customerId', 'createdBy', 'paidAmount', 'createdAt'];
+const INVALID_UPDATE_FIELDS = ['_id', 'customerId', 'createdBy', 'createdAt'];
 
 const orderSchema = new mongoose.Schema(
   {
@@ -33,11 +33,6 @@ const orderSchema = new mongoose.Schema(
       default: 0,
       min: [0, 'Total price cannot be negative']
     },
-    paidAmount: {
-      type: Number,
-      default: 0,
-      min: [0, 'Paid amount cannot be negative']
-    },
     note: {
       type: String,
       trim: true,
@@ -51,7 +46,14 @@ const orderSchema = new mongoose.Schema(
   }
 );
 
-// Static methods
+// Indexes
+orderSchema.index({ customerId: 1 });
+orderSchema.index({ createdBy: 1 });
+orderSchema.index({ status: 1 });
+orderSchema.index({ createdAt: -1 });
+
+// ==================== STATIC METHODS ====================
+
 orderSchema.statics.findByCustomerId = function (customerId, options = {}) {
   const query = { customerId };
   if (options.status) query.status = options.status;

@@ -56,12 +56,20 @@ Router.route('/:id/status')
     paymentController.updatePaymentStatus
   );
 
-// Get payments by order (useful for both customer and staff)
+Router.route('/:id/method')
+  .patch(
+    authMiddleware.isAuthorized,
+    authMiddleware.isStaffOrAdmin,
+    paymentValidation.validatePaymentId,
+    paymentValidation.updatePaymentMethod,
+    paymentController.updatePaymentMethod
+  );
+
 Router.route('/by-order/:orderId')
   .get(
     authMiddleware.isAuthorized,
     paymentValidation.validateOrderId,
-    paymentController.getPaymentsByOrderId
+    paymentController.getPaymentByOrderId
   );
 
 export const paymentRoute = Router;

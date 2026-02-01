@@ -14,22 +14,18 @@ const PAYMENT_METHOD = {
   BANK: 'bank'
 };
 
-const INVALID_UPDATE_FIELDS = ['_id', 'orderId', 'createdAt'];
-
 const paymentSchema = new mongoose.Schema(
   {
     orderId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Order',
       required: [true, 'Order ID is required'],
+      unique: true,
       index: true
     },
     method: {
       type: String,
-      enum: {
-        values: Object.values(PAYMENT_METHOD),
-        message: 'Payment method `{VALUE}` is not supported'
-      },
+      enum: Object.values(PAYMENT_METHOD),
       required: [true, 'Payment method is required']
     },
     amount: {
@@ -46,7 +42,8 @@ const paymentSchema = new mongoose.Schema(
       type: String,
       trim: true,
       default: null,
-      index: true
+      sparse: true,
+      unique: true
     },
     paidAt: {
       type: Date,
@@ -59,48 +56,26 @@ const paymentSchema = new mongoose.Schema(
   }
 );
 
-// Static methods
-paymentSchema.statics.findByOrderId = function (orderId, options = {}) {
-  const query = { orderId };
-  if (options.status) query.status = options.status;
-  return this.find(query).sort({ createdAt: -1 });
+// ==================== STATIC METHODS ====================
+
+// Find single payment by order (returns one or null)
+paymentSchema.statics.findByOrderId = function (orderId) {
+  return this.findOne({ orderId });
 };
 
-paymentSchema.statics.findOneById = function (paymentId) {
-  return this.findById(paymentId);
+// Create payment
+paymentSchema.statics.createPayment = function (paymentData, session = null) {
+  const options = session ? { session } : {};
+  return this.create([paymentData], options);
 };
 
-paymentSchema.statics.findByTransactionRef = function (transactionRef) {
-  return this.findOne({ transactionRef });
-};
-
-paymentSchema.statics.createPayment = function (paymentData) {
-  return this.create(paymentData);
-};
-
-paymentSchema.statics.updatePayment = async function (paymentId, updateData) {
-  // Prevent updating protected fields
-  Object.keys(updateData).forEach((field) => {
-    if (INVALID_UPDATE_FIELDS.includes(field)) {
-      delete updateData[field];
-    }
-  });
-
-  return this.findByIdAndUpdate(
-    paymentId,
-    { $set: updateData },
-    { new: true, runValidators: true }
-  );
-};
-
-paymentSchema.statics.updateStatus = function (paymentId, status, transactionRef = null) {
+// Update payment status and paidAt
+paymentSchema.statics.updateStatus = function (paymentId, status, transactionRef = null, session = null) {
   const updateData = { status };
 
-  if (status === PAYMENT_STATUS.PAID && !this.paidAt) {
+  if (status === PAYMENT_STATUS.PAID) {
     updateData.paidAt = new Date();
-  }
-
-  if (status === PAYMENT_STATUS.PENDING || status === PAYMENT_STATUS.FAILED) {
+  } else if (status === PAYMENT_STATUS.PENDING || status === PAYMENT_STATUS.FAILED) {
     updateData.paidAt = null;
   }
 
@@ -108,36 +83,25 @@ paymentSchema.statics.updateStatus = function (paymentId, status, transactionRef
     updateData.transactionRef = transactionRef;
   }
 
-  return this.findByIdAndUpdate(
-    paymentId,
-    { $set: updateData },
-    { new: true, runValidators: true }
-  );
+  const options = { new: true, runValidators: true };
+  if (session) options.session = session;
+
+  return this.findByIdAndUpdate(paymentId, { $set: updateData }, options);
 };
 
-paymentSchema.statics.deletePayment = function (paymentId) {
-  return this.findByIdAndDelete(paymentId);
+// Delete payment by ID
+paymentSchema.statics.deletePayment = function (paymentId, session = null) {
+  const options = session ? { session } : {};
+  return this.findByIdAndDelete(paymentId, options);
 };
 
-paymentSchema.statics.getTotalPaidByOrderId = async function (orderId) {
-  const result = await this.aggregate([
-    {
-      $match: {
-        orderId: new mongoose.Types.ObjectId(orderId),
-        status: PAYMENT_STATUS.PAID
-      }
-    },
-    {
-      $group: {
-        _id: null,
-        totalPaid: { $sum: '$amount' }
-      }
-    }
-  ]);
-
-  return result.length > 0 ? result[0].totalPaid : 0;
+// Delete payment by Order ID (for cascade delete)
+paymentSchema.statics.deleteByOrderId = function (orderId, session = null) {
+  const options = session ? { session } : {};
+  return this.deleteOne({ orderId }, options);
 };
 
+// Get payment stats (for reporting)
 paymentSchema.statics.getPaymentStats = async function (query = {}) {
   const { startDate, endDate, method } = query;
   const matchFilter = {};
@@ -150,48 +114,30 @@ paymentSchema.statics.getPaymentStats = async function (query = {}) {
 
   if (method) matchFilter.method = method;
 
-  // Stats by status
-  const byStatus = await this.aggregate([
-    { $match: matchFilter },
-    {
-      $group: {
-        _id: '$status',
-        count: { $sum: 1 },
-        totalAmount: { $sum: '$amount' }
+  const [byStatus, byMethod] = await Promise.all([
+    this.aggregate([
+      { $match: matchFilter },
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 },
+          totalAmount: { $sum: '$amount' }
+        }
       }
-    }
+    ]),
+    this.aggregate([
+      { $match: matchFilter },
+      {
+        $group: {
+          _id: '$method',
+          count: { $sum: 1 },
+          totalAmount: { $sum: '$amount' }
+        }
+      }
+    ])
   ]);
 
-  // Stats by method
-  const byMethod = await this.aggregate([
-    { $match: matchFilter },
-    {
-      $group: {
-        _id: '$method',
-        count: { $sum: 1 },
-        totalAmount: { $sum: '$amount' }
-      }
-    }
-  ]);
-
-  // Total successful payments
-  const successfulFilter = { ...matchFilter, status: PAYMENT_STATUS.PAID };
-  const successfulResult = await this.aggregate([
-    { $match: successfulFilter },
-    {
-      $group: {
-        _id: null,
-        totalAmount: { $sum: '$amount' },
-        count: { $sum: 1 }
-      }
-    }
-  ]);
-
-  return {
-    byStatus,
-    byMethod,
-    successful: successfulResult.length > 0 ? successfulResult[0] : { totalAmount: 0, count: 0 }
-  };
+  return { byStatus, byMethod };
 };
 
 const Payment = mongoose.model('Payment', paymentSchema);
