@@ -1,21 +1,25 @@
 import express from 'express';
 import { userController } from '~/controllers/userController';
-import { userValidation } from '~/validations/userValidation';
 import { authMiddleware } from '~/middlewares/authMiddleware';
 import { multerMiddleware } from '~/middlewares/multerMiddleware';
 
 const Router = express.Router();
 
-// ==================== AUTH (Public) ====================
+// Centralized middleware combinations
+const auth = authMiddleware.isAuthorized;
+const staffAuth = [authMiddleware.isAuthorized, authMiddleware.isStaffOrAdmin];
+const adminAuth = [authMiddleware.isAuthorized, authMiddleware.isAdmin];
+
+// ==================== PUBLIC ====================
 
 Router.route('/check-login')
-  .post(userValidation.checkLoginMethod, userController.checkLoginMethod);
+  .post(userController.checkLoginMethod);
 
 Router.route('/login/otp')
-  .post(userValidation.loginWithOTP, userController.loginWithOTP);
+  .post(userController.loginWithOTP);
 
 Router.route('/login/password')
-  .post(userValidation.loginWithPassword, userController.loginWithPassword);
+  .post(userController.loginWithPassword);
 
 Router.route('/refresh-token')
   .post(userController.refreshToken);
@@ -26,126 +30,48 @@ Router.route('/logout')
 // ==================== PASSWORD (Authenticated) ====================
 
 Router.route('/password')
-  .post(
-    authMiddleware.isAuthorized,
-    userValidation.setPassword,
-    userController.setPassword
-  )
-  .put(
-    authMiddleware.isAuthorized,
-    userValidation.changePassword,
-    userController.changePassword
-  )
-  .delete(
-    authMiddleware.isAuthorized,
-    userValidation.removePassword,
-    userController.removePassword
-  );
+  .post(auth, userController.setPassword)
+  .put(auth, userController.changePassword)
+  .delete(auth, userController.removePassword);
 
 // ==================== PROFILE (Authenticated) ====================
 
 Router.route('/profile')
-  .get(authMiddleware.isAuthorized, userController.getProfile)
-  .put(
-    authMiddleware.isAuthorized,
-    multerMiddleware.upload.single('avatar'),
-    userValidation.updateProfile,
-    userController.updateProfile
-  );
+  .get(auth, userController.getProfile)
+  .put(auth, multerMiddleware.upload.single('avatar'), userController.updateProfile);
 
 // ==================== CUSTOMERS (Staff/Admin) ====================
 
 Router.route('/customers/search')
-  .get(
-    authMiddleware.isAuthorized,
-    authMiddleware.isStaffOrAdmin,
-    userValidation.findCustomerByPhone,
-    userController.findCustomerByPhone
-  );
+  .get(staffAuth, userController.findCustomerByPhone);
 
 Router.route('/customers')
-  .get(
-    authMiddleware.isAuthorized,
-    authMiddleware.isStaffOrAdmin,
-    userController.getAllCustomers
-  )
-  .post(
-    authMiddleware.isAuthorized,
-    authMiddleware.isStaffOrAdmin,
-    userValidation.createCustomer,
-    userController.createCustomer
-  );
+  .get(staffAuth, userController.getAllCustomers)
+  .post(staffAuth, userController.createCustomer);
 
 Router.route('/customers/:id')
-  .get(
-    authMiddleware.isAuthorized,
-    authMiddleware.isStaffOrAdmin,
-    userValidation.validateId,
-    userController.getCustomerById
-  )
-  .put(
-    authMiddleware.isAuthorized,
-    authMiddleware.isStaffOrAdmin,
-    userValidation.validateId,
-    userValidation.updateCustomer,
-    userController.updateCustomer
-  );
+  .get(staffAuth, userController.getCustomerById)
+  .put(staffAuth, userController.updateCustomer);
 
 Router.route('/customers/:id/history')
-  .get(
-    authMiddleware.isAuthorized,
-    authMiddleware.isStaffOrAdmin,
-    userValidation.validateId,
-    userController.getCustomerWithHistory
-  );
+  .get(staffAuth, userController.getCustomerWithHistory);
 
 // ==================== USERS (Admin) ====================
 
 Router.route('/users')
-  .get(
-    authMiddleware.isAuthorized,
-    authMiddleware.isAdmin,
-    userController.getAllUsers
-  );
+  .get(adminAuth, userController.getAllUsers);
 
 Router.route('/users/staff')
-  .post(
-    authMiddleware.isAuthorized,
-    authMiddleware.isAdmin,
-    userValidation.createStaff,
-    userController.createStaff
-  );
+  .post(adminAuth, userController.createStaff);
 
 Router.route('/users/:id')
-  .get(
-    authMiddleware.isAuthorized,
-    authMiddleware.isAdmin,
-    userValidation.validateId,
-    userController.getUserById
-  )
-  .delete(
-    authMiddleware.isAuthorized,
-    authMiddleware.isAdmin,
-    userValidation.validateId,
-    userController.deleteUser
-  );
+  .get(adminAuth, userController.getUserById)
+  .delete(adminAuth, userController.deleteUser);
 
 Router.route('/users/:id/role')
-  .patch(
-    authMiddleware.isAuthorized,
-    authMiddleware.isAdmin,
-    userValidation.validateId,
-    userValidation.updateUserRole,
-    userController.updateUserRole
-  );
+  .patch(adminAuth, userController.updateUserRole);
 
 Router.route('/users/:id/status')
-  .patch(
-    authMiddleware.isAuthorized,
-    authMiddleware.isAdmin,
-    userValidation.validateId,
-    userValidation.updateUserStatus,
-    userController.updateUserStatus
-  );
+  .patch(adminAuth, userController.updateUserStatus);
 
 export const userRoute = Router;

@@ -1,75 +1,40 @@
 import express from 'express';
 import { paymentController } from '~/controllers/paymentController';
-import { paymentValidation } from '~/validations/paymentValidation';
 import { authMiddleware } from '~/middlewares/authMiddleware';
 
 const Router = express.Router();
 
-// Webhook endpoints (public - no auth, validated by signature in real implementation)
+// Centralized middleware combinations
+const auth = authMiddleware.isAuthorized;
+const staffAuth = [authMiddleware.isAuthorized, authMiddleware.isStaffOrAdmin];
+
+// ============== WEBHOOK (Public) ==============
+
 Router.route('/webhook/momo')
-  .post(
-    paymentValidation.webhook,
-    paymentController.handleWebhook
-  );
+  .post(paymentController.handleWebhook);
 
 Router.route('/webhook/vnpay')
-  .post(
-    paymentValidation.webhook,
-    paymentController.handleWebhook
-  );
+  .post(paymentController.handleWebhook);
 
-// Protected routes
+// ============== STAFF/ADMIN ==============
+
 Router.route('/')
-  .post(
-    authMiddleware.isAuthorized,
-    authMiddleware.isStaffOrAdmin,
-    paymentValidation.createPayment,
-    paymentController.createPayment
-  )
-  .get(
-    authMiddleware.isAuthorized,
-    authMiddleware.isStaffOrAdmin,
-    paymentValidation.getAllPayments,
-    paymentController.getAllPayments
-  );
+  .post(staffAuth, paymentController.createPayment)
+  .get(staffAuth, paymentController.getAllPayments);
 
 Router.route('/:id')
-  .get(
-    authMiddleware.isAuthorized,
-    authMiddleware.isStaffOrAdmin,
-    paymentValidation.validatePaymentId,
-    paymentController.getPaymentById
-  )
-  .delete(
-    authMiddleware.isAuthorized,
-    authMiddleware.isStaffOrAdmin,
-    paymentValidation.validatePaymentId,
-    paymentController.deletePayment
-  );
+  .get(staffAuth, paymentController.getPaymentById)
+  .delete(staffAuth, paymentController.deletePayment);
 
 Router.route('/:id/status')
-  .patch(
-    authMiddleware.isAuthorized,
-    authMiddleware.isStaffOrAdmin,
-    paymentValidation.validatePaymentId,
-    paymentValidation.updatePaymentStatus,
-    paymentController.updatePaymentStatus
-  );
+  .patch(staffAuth, paymentController.updatePaymentStatus);
 
 Router.route('/:id/method')
-  .patch(
-    authMiddleware.isAuthorized,
-    authMiddleware.isStaffOrAdmin,
-    paymentValidation.validatePaymentId,
-    paymentValidation.updatePaymentMethod,
-    paymentController.updatePaymentMethod
-  );
+  .patch(staffAuth, paymentController.updatePaymentMethod);
+
+// ============== AUTHENTICATED ==============
 
 Router.route('/by-order/:orderId')
-  .get(
-    authMiddleware.isAuthorized,
-    paymentValidation.validateOrderId,
-    paymentController.getPaymentByOrderId
-  );
+  .get(auth, paymentController.getPaymentByOrderId);
 
 export const paymentRoute = Router;

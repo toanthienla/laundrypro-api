@@ -1,106 +1,43 @@
 import express from 'express';
 import { orderController } from '~/controllers/orderController';
-import { orderValidation } from '~/validations/orderValidation';
 import { authMiddleware } from '~/middlewares/authMiddleware';
 
 const Router = express.Router();
 
-// ============== CUSTOMER ==============
+// Centralized middleware combinations
+const auth = authMiddleware.isAuthorized;
+const staffAuth = [authMiddleware.isAuthorized, authMiddleware.isStaffOrAdmin];
+const adminAuth = [authMiddleware.isAuthorized, authMiddleware.isAdmin];
+
 Router.route('/my-orders')
-  .get(
-    authMiddleware.isAuthorized,
-    orderController.getMyOrders
-  );
+  .get(auth, orderController.getMyOrders);
 
 Router.route('/my-orders/:id')
-  .get(
-    authMiddleware.isAuthorized,
-    orderValidation.validateId,
-    orderController.getMyOrderById
-  );
+  .get(auth, orderController.getMyOrderById);
 
-// ============== STAFF/ADMIN ==============
 Router.route('/')
-  .post(
-    authMiddleware.isAuthorized,
-    authMiddleware.isStaffOrAdmin,
-    orderValidation.createOrder,
-    orderController.createOrder
-  )
-  .get(
-    authMiddleware.isAuthorized,
-    authMiddleware.isStaffOrAdmin,
-    orderController.getAllOrders
-  );
+  .post(staffAuth, orderController.createOrder)
+  .get(staffAuth, orderController.getAllOrders);
 
 Router.route('/search')
-  .get(
-    authMiddleware.isAuthorized,
-    authMiddleware.isStaffOrAdmin,
-    orderValidation.getOrdersByCustomerPhone,
-    orderController.getOrdersByCustomerPhone
-  );
+  .get(staffAuth, orderController.getOrdersByCustomerPhone);
 
 Router.route('/stats')
-  .get(
-    authMiddleware.isAuthorized,
-    authMiddleware.isAdmin,
-    orderController.getOrderStats
-  );
+  .get(adminAuth, orderController.getOrderStats);
 
 Router.route('/:id')
-  .get(
-    authMiddleware.isAuthorized,
-    authMiddleware.isStaffOrAdmin,
-    orderValidation.validateId,
-    orderController.getOrderById
-  )
-  .put(
-    authMiddleware.isAuthorized,
-    authMiddleware.isStaffOrAdmin,
-    orderValidation.validateId,
-    orderValidation.updateOrder,
-    orderController.updateOrder
-  )
-  .delete(
-    authMiddleware.isAuthorized,
-    authMiddleware.isStaffOrAdmin,
-    orderValidation.validateId,
-    orderController.deleteOrder
-  );
+  .get(staffAuth, orderController.getOrderById)
+  .put(staffAuth, orderController.updateOrder)
+  .delete(staffAuth, orderController.deleteOrder);
 
 Router.route('/:id/status')
-  .patch(
-    authMiddleware.isAuthorized,
-    authMiddleware.isStaffOrAdmin,
-    orderValidation.validateId,
-    orderValidation.updateOrderStatus,
-    orderController.updateOrderStatus
-  );
+  .patch(staffAuth, orderController.updateOrderStatus);
 
-// ============== ORDER ITEMS ==============
 Router.route('/:orderId/items')
-  .post(
-    authMiddleware.isAuthorized,
-    authMiddleware.isStaffOrAdmin,
-    orderValidation.validateOrderId,
-    orderValidation.addOrderItem,
-    orderController.addOrderItem
-  );
+  .post(staffAuth, orderController.addOrderItem);
 
 Router.route('/:orderId/items/:itemId')
-  .put(
-    authMiddleware.isAuthorized,
-    authMiddleware.isStaffOrAdmin,
-    orderValidation.validateOrderItemIds,
-    orderValidation.updateOrderItem,
-    orderController.updateOrderItem
-  )
-  .delete(
-    authMiddleware.isAuthorized,
-    authMiddleware.isStaffOrAdmin,
-    orderValidation.validateOrderItemIds,
-    orderController.deleteOrderItem
-  );
+  .put(staffAuth, orderController.updateOrderItem)
+  .delete(staffAuth, orderController.deleteOrderItem);
 
 export const orderRoute = Router;
