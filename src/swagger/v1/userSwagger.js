@@ -148,6 +148,40 @@
 
 /**
  * @swagger
+ * /v1/users/reset-password-otp:
+ *   post:
+ *     summary: Reset password with Firebase OTP (Forget password)
+ *     tags: [Users]
+ *     description: >
+ *       User verifies phone number via Firebase OTP and receives an idToken.
+ *       This API resets password without requiring current password.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - idToken
+ *               - newPassword
+ *             properties:
+ *               idToken:
+ *                 type: string
+ *                 description: Firebase ID token after OTP verification
+ *               newPassword:
+ *                 type: string
+ *                 example: "NewPassword123!"
+ *     responses:
+ *       200:
+ *         description: Password reset successfully
+ *       400:
+ *         description: Invalid token
+ *       404:
+ *         description: User not found
+ */
+
+/**
+ * @swagger
  * /v1/users/refresh-token:
  *   post:
  *     summary: Refresh access token

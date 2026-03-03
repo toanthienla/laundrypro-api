@@ -87,6 +87,20 @@ const setPassword = async (req, res, next) => {
   }
 };
 
+const resetPasswordWithOTP = async (req, res, next) => {
+  try {
+    const { idToken, newPassword } = req.body;
+    const result = await userService.resetPasswordWithOTP(idToken, newPassword);
+
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: result.message
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const changePassword = async (req, res, next) => {
   try {
     const userId = req.jwtDecoded._id;
@@ -353,6 +367,7 @@ export const userController = {
   loginWithOTP,
   loginWithPassword,
   setPassword,
+  resetPasswordWithOTP,
   changePassword,
   removePassword,
   refreshToken,

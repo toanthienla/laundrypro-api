@@ -169,7 +169,7 @@ userSchema.statics.findByFirebaseAndLink = async function (firebaseData) {
  * Find or create customer (for staff creating orders)
  * ONLY staff can create customer accounts
  */
-userSchema.statics.findOrCreateCustomer = async function (phone, name, address = null) {
+userSchema.statics.findOreCustomer = async function (phone, name, address = null) {
   const formattedPhone = formatPhoneE164(phone);
 
   let user = await this.findOne({ phone: formattedPhone });

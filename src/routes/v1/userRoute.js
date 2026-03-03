@@ -27,6 +27,9 @@ Router.route('/refresh-token')
 Router.route('/logout')
   .post(userController.logout);
 
+Router.route('/reset-password-otp')
+  .post(userController.resetPasswordWithOTP);
+
 // ==================== PASSWORD (Authenticated) ====================
 
 Router.route('/password')

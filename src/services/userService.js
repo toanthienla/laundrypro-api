@@ -238,6 +238,26 @@ const setPassword = async (userId, reqBody) => {
   };
 };
 
+// Forget password with OTP - verify token, find user by phone, update password
+const resetPasswordWithOTP = async (idToken, newPassword) => {
+  const firebaseUser = await FirebaseProvider.verifyIdToken(idToken);
+
+  if (!firebaseUser.phone) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, 'Token does not contain a verified phone number.');
+  }
+  const user = await User.findOne({ phone: firebaseUser.phone });
+  if (!user) {
+    throw new ApiError(StatusCodes.NOT_FOUND, 'No user found with this phone number.');
+  }
+
+  await user.setPassword(newPassword);
+
+  // 4. Force logout other sessions (Optional but recommended)
+  await FirebaseProvider.revokeRefreshTokens(firebaseUser.uid);
+
+  return { message: 'Password reset successfully.' };
+};
+
 /**
  * Change password
  */
@@ -666,6 +686,7 @@ export const userService = {
   loginWithOTP,
   loginWithPassword,
   setPassword,
+  resetPasswordWithOTP,
   changePassword,
   removePassword,
   refreshToken,

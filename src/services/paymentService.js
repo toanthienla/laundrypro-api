@@ -18,10 +18,14 @@ const createPayment = async (reqBody, userRole) => {
 
     const existingPayment = await Payment.findByOrderId(orderId).session(session);
     if (existingPayment) {
-      throw new ApiError(
-        StatusCodes.CONFLICT,
-        'Order already has a payment. Use update instead.'
-      );
+      if (existingPayment.status === PAYMENT_STATUS.PAID) {
+        throw new ApiError(
+          StatusCodes.CONFLICT,
+          'Order already has a payment. Use update instead.'
+        );
+      }
+
+      await Payment.deleteByOrderId(orderId, session);
     }
 
     if (order.status === ORDER_STATUS.COMPLETED) {
