@@ -1,6 +1,7 @@
 import express from 'express';
 import { orderController } from '~/controllers/orderController';
 import { authMiddleware } from '~/middlewares/authMiddleware';
+import { orderValidation } from '~/validations/orderValidation';
 
 const Router = express.Router();
 
@@ -16,7 +17,7 @@ Router.route('/my-orders/:id')
   .get(auth, orderController.getMyOrderById);
 
 Router.route('/')
-  .post(staffAuth, orderController.createOrder)
+  .post(staffAuth, orderValidation.createOrder, orderController.createOrder)
   .get(staffAuth, orderController.getAllOrders);
 
 Router.route('/search')
@@ -27,17 +28,17 @@ Router.route('/stats')
 
 Router.route('/:id')
   .get(staffAuth, orderController.getOrderById)
-  .put(staffAuth, orderController.updateOrder)
+  .put(staffAuth, orderValidation.updateOrder, orderController.updateOrder)
   .delete(staffAuth, orderController.deleteOrder);
 
 Router.route('/:id/status')
-  .patch(staffAuth, orderController.updateOrderStatus);
+  .patch(staffAuth, orderValidation.updateOrderStatus, orderController.updateOrderStatus);
 
 Router.route('/:orderId/items')
-  .post(staffAuth, orderController.addOrderItem);
+  .post(staffAuth, orderValidation.addOrderItem, orderController.addOrderItem);
 
 Router.route('/:orderId/items/:itemId')
-  .put(staffAuth, orderController.updateOrderItem)
+  .put(staffAuth, orderValidation.updateOrderItem, orderController.updateOrderItem)
   .delete(staffAuth, orderController.deleteOrderItem);
 
 export const orderRoute = Router;

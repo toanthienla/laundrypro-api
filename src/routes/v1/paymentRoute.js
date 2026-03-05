@@ -1,6 +1,7 @@
 import express from 'express';
 import { paymentController } from '~/controllers/paymentController';
 import { authMiddleware } from '~/middlewares/authMiddleware';
+import { paymentValidation } from '~/validations/paymentValidation';
 
 const Router = express.Router();
 
@@ -19,7 +20,7 @@ Router.route('/webhook/vnpay')
 // ============== STAFF/ADMIN ==============
 
 Router.route('/')
-  .post(staffAuth, paymentController.createPayment)
+  .post(staffAuth, paymentValidation.createPayment, paymentController.createPayment)
   .get(staffAuth, paymentController.getAllPayments);
 
 Router.route('/:id')
@@ -27,10 +28,10 @@ Router.route('/:id')
   .delete(staffAuth, paymentController.deletePayment);
 
 Router.route('/:id/status')
-  .patch(staffAuth, paymentController.updatePaymentStatus);
+  .patch(staffAuth, paymentValidation.updatePaymentStatus, paymentController.updatePaymentStatus);
 
 Router.route('/:id/method')
-  .patch(staffAuth, paymentController.updatePaymentMethod);
+  .patch(staffAuth, paymentValidation.updatePaymentMethod, paymentController.updatePaymentMethod);
 
 // ============== AUTHENTICATED ==============
 

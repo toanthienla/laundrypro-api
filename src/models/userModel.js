@@ -21,13 +21,7 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Phone is required'],
       unique: true,
-      trim: true,
-      validate: {
-        validator: function (v) {
-          return /^\+[1-9]\d{6,14}$/.test(v);
-        },
-        message: 'Phone must be in E.164 format (e.g., +84901234567)'
-      }
+      trim: true
     },
     firebaseUid: {
       type: String,
