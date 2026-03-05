@@ -7,8 +7,9 @@ const createPayment = async (req, res, next) => {
   const condition = Joi.object({
     orderId: Joi.string().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE).required(),
     amount: Joi.number().min(0).required(),
-    method: Joi.string().valid('cash', 'momo', 'vnpay', 'bank_transfer').required(),
-    status: Joi.string().valid('pending', 'success', 'failed', 'refunded').default('pending')
+    method: Joi.string().valid('cash', 'momo', 'vnpay', 'bank').required(),
+    transactionRef: Joi.string().optional().trim().strict().allow(null, ''),
+    markAsPaid: Joi.boolean().optional()
   });
 
   try {
@@ -21,7 +22,7 @@ const createPayment = async (req, res, next) => {
 
 const updatePaymentStatus = async (req, res, next) => {
   const condition = Joi.object({
-    status: Joi.string().valid('pending', 'success', 'failed', 'refunded').required(),
+    status: Joi.string().valid('pending', 'paid', 'failed', 'refunded').required(),
     transactionRef: Joi.string().optional().allow(null, '')
   });
 
@@ -35,7 +36,7 @@ const updatePaymentStatus = async (req, res, next) => {
 
 const updatePaymentMethod = async (req, res, next) => {
   const condition = Joi.object({
-    method: Joi.string().valid('cash', 'momo', 'vnpay', 'bank_transfer').required()
+    method: Joi.string().valid('cash', 'momo', 'vnpay', 'bank').required()
   });
 
   try {

@@ -5,18 +5,19 @@ import { OBJECT_ID_RULE, OBJECT_ID_RULE_MESSAGE, PHONE_RULE, PHONE_RULE_MESSAGE 
 
 const createOrder = async (req, res, next) => {
   const condition = Joi.object({
-    customerId: Joi.string().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE).optional(),
-    customerPhone: Joi.string().pattern(PHONE_RULE).message(PHONE_RULE_MESSAGE).optional(),
-    customerName: Joi.string().min(3).max(50).trim().strict().optional(),
+    customerPhone: Joi.string().required().pattern(PHONE_RULE).message(PHONE_RULE_MESSAGE),
+    customerName: Joi.string().required().min(3).max(50).trim().strict(),
+    customerAddress: Joi.string().optional().trim().strict().allow(null, ''),
     items: Joi.array().items(
       Joi.object({
         serviceId: Joi.string().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE).required(),
         quantity: Joi.number().min(1).required(),
-        price: Joi.number().min(0).required()
+        unitPrice: Joi.number().min(0).optional(),
+        note: Joi.string().optional().trim().strict().allow(null, '')
       })
     ).min(1).required(),
-    notes: Joi.string().optional().trim().strict()
-  }).or('customerId', 'customerPhone');
+    note: Joi.string().optional().trim().strict().allow(null, '')
+  });
 
   try {
     await condition.validateAsync(req.body, { abortEarly: false, allowUnknown: true });
@@ -28,15 +29,7 @@ const createOrder = async (req, res, next) => {
 
 const updateOrder = async (req, res, next) => {
   const condition = Joi.object({
-    customerId: Joi.string().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE).optional(),
-    items: Joi.array().items(
-      Joi.object({
-        serviceId: Joi.string().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE).required(),
-        quantity: Joi.number().min(1).required(),
-        price: Joi.number().min(0).required()
-      })
-    ).optional(),
-    notes: Joi.string().optional().trim().strict()
+    note: Joi.string().optional().trim().strict().allow(null, '')
   });
 
   try {
@@ -64,7 +57,8 @@ const addOrderItem = async (req, res, next) => {
   const condition = Joi.object({
     serviceId: Joi.string().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE).required(),
     quantity: Joi.number().min(1).required(),
-    price: Joi.number().min(0).required()
+    unitPrice: Joi.number().min(0).optional(),
+    note: Joi.string().optional().trim().strict().allow(null, '')
   });
 
   try {
@@ -78,7 +72,8 @@ const addOrderItem = async (req, res, next) => {
 const updateOrderItem = async (req, res, next) => {
   const condition = Joi.object({
     quantity: Joi.number().min(1).optional(),
-    price: Joi.number().min(0).optional()
+    unitPrice: Joi.number().min(0).optional(),
+    note: Joi.string().optional().trim().strict().allow(null, '')
   });
 
   try {

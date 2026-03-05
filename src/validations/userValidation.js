@@ -5,9 +5,7 @@ import { EMAIL_RULE, EMAIL_RULE_MESSAGE, PASSWORD_RULE, PASSWORD_RULE_MESSAGE, P
 
 const checkLoginMethod = async (req, res, next) => {
   const condition = Joi.object({
-    identifier: Joi.string().required().trim().strict().messages({
-      'any.required': 'Phone or Email is required.'
-    })
+    phone: Joi.string().required().pattern(PHONE_RULE).message(PHONE_RULE_MESSAGE).trim().strict()
   });
 
   try {
@@ -33,9 +31,7 @@ const loginWithOTP = async (req, res, next) => {
 
 const loginWithPassword = async (req, res, next) => {
   const condition = Joi.object({
-    emailOrPhone: Joi.string().required().trim().strict().messages({
-      'any.required': 'Email or phone number is required.'
-    }),
+    phone: Joi.string().required().pattern(PHONE_RULE).message(PHONE_RULE_MESSAGE).trim().strict(),
     password: Joi.string().required().trim().strict().messages({
       'any.required': 'Password is required.'
     })
@@ -54,6 +50,10 @@ const setPassword = async (req, res, next) => {
     password: Joi.string().required().pattern(PASSWORD_RULE).messages({
       'string.pattern.base': PASSWORD_RULE_MESSAGE,
       'any.required': 'Password is required.'
+    }),
+    confirmPassword: Joi.string().required().valid(Joi.ref('password')).messages({
+      'any.only': 'Passwords do not match.',
+      'any.required': 'Confirm password is required.'
     })
   });
 
@@ -90,6 +90,10 @@ const changePassword = async (req, res, next) => {
     newPassword: Joi.string().required().pattern(PASSWORD_RULE).messages({
       'string.pattern.base': PASSWORD_RULE_MESSAGE,
       'any.required': 'New password is required.'
+    }),
+    confirmPassword: Joi.string().required().valid(Joi.ref('newPassword')).messages({
+      'any.only': 'Passwords do not match.',
+      'any.required': 'Confirm password is required.'
     })
   });
 
@@ -103,8 +107,8 @@ const changePassword = async (req, res, next) => {
 
 const removePassword = async (req, res, next) => {
   const condition = Joi.object({
-    password: Joi.string().required().trim().strict().messages({
-      'any.required': 'Password is required.'
+    currentPassword: Joi.string().required().trim().strict().messages({
+      'any.required': 'Current password is required.'
     })
   });
 
@@ -118,10 +122,9 @@ const removePassword = async (req, res, next) => {
 
 const updateProfile = async (req, res, next) => {
   const condition = Joi.object({
-    fullName: Joi.string().min(3).max(50).optional().trim().strict(),
-    phone: Joi.string().pattern(PHONE_RULE).optional().messages({
-      'string.pattern.base': PHONE_RULE_MESSAGE
-    })
+    name: Joi.string().min(3).max(50).optional().trim().strict(),
+    email: Joi.string().pattern(EMAIL_RULE).message(EMAIL_RULE_MESSAGE).optional().allow(null, ''),
+    address: Joi.string().optional().trim().strict().allow(null, '')
   });
 
   try {
@@ -134,12 +137,14 @@ const updateProfile = async (req, res, next) => {
 
 const createCustomer = async (req, res, next) => {
   const condition = Joi.object({
-    fullName: Joi.string().required().min(3).max(50).trim().strict(),
     phone: Joi.string().required().pattern(PHONE_RULE).messages({
       'string.pattern.base': PHONE_RULE_MESSAGE,
       'any.required': 'Phone number is required.'
     }),
-    address: Joi.string().optional().trim().strict()
+    name: Joi.string().required().min(3).max(50).trim().strict(),
+    email: Joi.string().pattern(EMAIL_RULE).message(EMAIL_RULE_MESSAGE).optional().allow(null, ''),
+    address: Joi.string().optional().trim().strict().allow(null, ''),
+    note: Joi.string().optional().trim().strict().allow(null, '')
   });
 
   try {
@@ -152,11 +157,10 @@ const createCustomer = async (req, res, next) => {
 
 const updateCustomer = async (req, res, next) => {
   const condition = Joi.object({
-    fullName: Joi.string().optional().min(3).max(50).trim().strict(),
-    phone: Joi.string().optional().pattern(PHONE_RULE).messages({
-      'string.pattern.base': PHONE_RULE_MESSAGE
-    }),
-    address: Joi.string().optional().trim().strict()
+    name: Joi.string().optional().min(3).max(50).trim().strict(),
+    email: Joi.string().pattern(EMAIL_RULE).message(EMAIL_RULE_MESSAGE).optional().allow(null, ''),
+    address: Joi.string().optional().trim().strict().allow(null, ''),
+    note: Joi.string().optional().trim().strict().allow(null, '')
   });
 
   try {
@@ -169,19 +173,12 @@ const updateCustomer = async (req, res, next) => {
 
 const createStaff = async (req, res, next) => {
   const condition = Joi.object({
-    fullName: Joi.string().required().min(3).max(50).trim().strict(),
-    email: Joi.string().required().pattern(EMAIL_RULE).trim().strict().messages({
-      'string.pattern.base': EMAIL_RULE_MESSAGE,
-      'any.required': 'Email is required.'
+    phone: Joi.string().required().pattern(PHONE_RULE).messages({
+      'string.pattern.base': PHONE_RULE_MESSAGE,
+      'any.required': 'Phone number is required.'
     }),
-    password: Joi.string().required().pattern(PASSWORD_RULE).messages({
-      'string.pattern.base': PASSWORD_RULE_MESSAGE,
-      'any.required': 'Password is required.'
-    }),
-    phone: Joi.string().optional().pattern(PHONE_RULE).messages({
-      'string.pattern.base': PHONE_RULE_MESSAGE
-    }),
-    role: Joi.string().valid('staff', 'admin').default('staff')
+    name: Joi.string().required().min(3).max(50).trim().strict(),
+    email: Joi.string().pattern(EMAIL_RULE).message(EMAIL_RULE_MESSAGE).optional().allow(null, '')
   });
 
   try {
@@ -194,7 +191,7 @@ const createStaff = async (req, res, next) => {
 
 const updateUserRole = async (req, res, next) => {
   const condition = Joi.object({
-    role: Joi.string().valid('user', 'staff', 'admin').required()
+    role: Joi.string().valid('customer', 'staff', 'admin').required()
   });
 
   try {
@@ -207,7 +204,7 @@ const updateUserRole = async (req, res, next) => {
 
 const updateUserStatus = async (req, res, next) => {
   const condition = Joi.object({
-    status: Joi.string().valid('active', 'inactive').required()
+    status: Joi.string().valid('active', 'suspended').required()
   });
 
   try {

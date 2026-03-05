@@ -5,11 +5,10 @@ import ApiError from '~/utils/ApiError';
 const createService = async (req, res, next) => {
   const condition = Joi.object({
     name: Joi.string().required().min(3).max(100).trim().strict(),
-    description: Joi.string().required().trim().strict(),
+    category: Joi.string().required().trim().strict().max(100),
     price: Joi.number().required().min(0),
-    category: Joi.string().required().trim().strict(),
-    unit: Joi.string().required().trim().strict(),
-    active: Joi.boolean().default(true)
+    unit: Joi.string().required().trim().strict().max(50),
+    active: Joi.boolean().optional().default(true)
   });
 
   try {
@@ -23,10 +22,9 @@ const createService = async (req, res, next) => {
 const updateService = async (req, res, next) => {
   const condition = Joi.object({
     name: Joi.string().optional().min(3).max(100).trim().strict(),
-    description: Joi.string().optional().trim().strict(),
+    category: Joi.string().optional().trim().strict().max(100),
     price: Joi.number().optional().min(0),
-    category: Joi.string().optional().trim().strict(),
-    unit: Joi.string().optional().trim().strict(),
+    unit: Joi.string().optional().trim().strict().max(50),
     active: Joi.boolean().optional()
   });
 
