@@ -6,9 +6,9 @@ import ms from 'ms';
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: env.BUILD_MODE === 'production',
-  sameSite: env.BUILD_MODE === 'production' ? 'None' : 'Lax',
-  domain: env.BUILD_MODE === 'production' ? env.COOKIE_DOMAIN : undefined
+  secure: false,
+  sameSite: 'None',
+  domain: undefined
 };
 
 // ==================== AUTH ====================
