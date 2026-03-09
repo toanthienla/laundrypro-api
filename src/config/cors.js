@@ -15,14 +15,13 @@ export const corsOptions = {
       return callback(null, true);
     }
 
-    return callback(null, true);
 
-    // // Only whitelist domain can access
-    // if (WHITELIST_DOMAINS.includes(origin)) {
-    //   return callback(null, true);
-    // }
+    // Only whitelist domain can access
+    if (WHITELIST_DOMAINS.includes(origin)) {
+      return callback(null, true);
+    }
 
-    // return callback(new ApiError(StatusCodes.FORBIDDEN, `${origin} not allowed by our CORS Policy.`));
+    return callback(new ApiError(StatusCodes.FORBIDDEN, `${origin} not allowed by our CORS Policy.`));
   },
 
   // Some legacy browsers (IE11, various SmartTVs) choke on 204

@@ -420,10 +420,17 @@ const getAllCustomers = async (query = {}) => {
   const filter = { role: USER_ROLES.CUSTOMER };
 
   if (search) {
-    filter.$or = [
-      { phone: { $regex: search, $options: 'i' } },
-      { name: { $regex: search, $options: 'i' } }
+    const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const conditions = [
+      { phone: { $regex: escapedSearch, $options: 'i' } },
+      { name: { $regex: escapedSearch, $options: 'i' } }
     ];
+    if (search.startsWith('0')) {
+      conditions.push({ phone: { $regex: '\\+84' + escapedSearch.slice(1), $options: 'i' } });
+    } else if (search.startsWith('84')) {
+      conditions.push({ phone: { $regex: '\\+' + escapedSearch, $options: 'i' } });
+    }
+    filter.$or = conditions;
   }
 
   const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -542,14 +549,24 @@ const getAllUsers = async (query = {}) => {
   const filter = {};
 
   if (search) {
-    filter.$or = [
-      { phone: { $regex: search, $options: 'i' } },
-      { name: { $regex: search, $options: 'i' } },
-      { email: { $regex: search, $options: 'i' } }
+    const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const conditions = [
+      { phone: { $regex: escapedSearch, $options: 'i' } },
+      { name: { $regex: escapedSearch, $options: 'i' } },
+      { email: { $regex: escapedSearch, $options: 'i' } }
     ];
+    if (search.startsWith('0')) {
+      conditions.push({ phone: { $regex: '\\+84' + escapedSearch.slice(1), $options: 'i' } });
+    } else if (search.startsWith('84')) {
+      conditions.push({ phone: { $regex: '\\+' + escapedSearch, $options: 'i' } });
+    }
+    filter.$or = conditions;
   }
 
-  if (role) filter.role = role;
+  if (role) {
+    const roles = role.split(',');
+    filter.role = roles.length > 1 ? { $in: roles } : role;
+  }
   if (status) filter.status = status;
 
   const skip = (parseInt(page) - 1) * parseInt(limit);
