@@ -82,6 +82,10 @@ const updateService = async (serviceId, reqBody, imageFile) => {
   if (reqBody.unit) updateData.unit = reqBody.unit;
   if (reqBody.active !== undefined) updateData.active = reqBody.active;
 
+  if (reqBody.removeImage === 'true') {
+    updateData.image = null;
+  }
+
   if (imageFile) {
     const uploaded = await CloudinaryProvider.streamUpload(imageFile.buffer, 'services');
     updateData.image = uploaded.secure_url;

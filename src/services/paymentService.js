@@ -102,7 +102,7 @@ const getPaymentByOrderId = async (orderId) => {
 };
 
 const getAllPayments = async (query = {}) => {
-  const { orderId, status, method, page = 1, limit = 10, startDate, endDate } = query;
+  const { orderId, status, method, search, page = 1, limit = 10, startDate, endDate } = query;
   const filter = {};
 
   if (orderId) filter.orderId = orderId;
@@ -113,6 +113,14 @@ const getAllPayments = async (query = {}) => {
     filter.createdAt = {};
     if (startDate) filter.createdAt.$gte = new Date(startDate);
     if (endDate) filter.createdAt.$lte = new Date(endDate + 'T23:59:59.999Z');
+  }
+
+  if (search) {
+    filter.$or = [
+      { transactionRef: { $regex: search, $options: 'i' } },
+      { $expr: { $regexMatch: { input: { $toString: '$_id' }, regex: search, options: 'i' } } },
+      { $expr: { $regexMatch: { input: { $toString: '$orderId' }, regex: search, options: 'i' } } }
+    ];
   }
 
   const skip = (parseInt(page) - 1) * parseInt(limit);

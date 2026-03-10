@@ -44,11 +44,12 @@ const getPaymentById = async (req, res, next) => {
 
 const getAllPayments = async (req, res, next) => {
   try {
-    const { orderId, status, method, page, limit, startDate, endDate } = req.query;
+    const { orderId, status, method, search, page, limit, startDate, endDate } = req.query;
     const result = await paymentService.getAllPayments({
       orderId,
       status,
       method,
+      search,
       page,
       limit,
       startDate,

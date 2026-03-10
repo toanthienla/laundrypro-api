@@ -62,12 +62,13 @@ const getOrdersByCustomerPhone = async (req, res, next) => {
 
 const getAllOrders = async (req, res, next) => {
   try {
-    const { status, customerId, createdBy, customerPhone, page, limit, startDate, endDate } = req.query;
+    const { status, customerId, createdBy, customerPhone, search, page, limit, startDate, endDate } = req.query;
     const result = await orderService.getAllOrders({
       status,
       customerId,
       createdBy,
       customerPhone,
+      search,
       page,
       limit,
       startDate,

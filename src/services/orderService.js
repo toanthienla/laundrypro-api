@@ -191,7 +191,7 @@ const getOrdersByCustomerPhone = async (phone, query = {}) => {
 };
 
 const getAllOrders = async (query = {}) => {
-  const { status, customerId, createdBy, customerPhone, page = 1, limit = 10, startDate, endDate } = query;
+  const { status, customerId, createdBy, customerPhone, search, page = 1, limit = 10, startDate, endDate } = query;
   const filter = {};
 
   if (status) filter.status = status;
@@ -214,6 +214,20 @@ const getAllOrders = async (query = {}) => {
     filter.createdAt = {};
     if (startDate) filter.createdAt.$gte = new Date(startDate);
     if (endDate) filter.createdAt.$lte = new Date(endDate + 'T23:59:59.999Z');
+  }
+
+  if (search) {
+    const searchRegex = { $regex: search, $options: 'i' };
+    const users = await User.find({
+      $or: [{ name: searchRegex }, { phone: searchRegex }]
+    }).select('_id');
+    const userIds = users.map(u => u._id);
+
+    filter.$or = [
+      { note: searchRegex },
+      { customerId: { $in: userIds } },
+      { $expr: { $regexMatch: { input: { $toString: '$_id' }, regex: search, options: 'i' } } }
+    ];
   }
 
   const skip = (parseInt(page) - 1) * parseInt(limit);
