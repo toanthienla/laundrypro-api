@@ -145,6 +145,51 @@ const getAllPayments = async (query = {}) => {
   };
 };
 
+const getMyPayments = async (userId, { page = 1, limit = 10 } = {}) => {
+  const pageNumber = parseInt(page, 10);
+  const limitNumber = parseInt(limit, 10);
+  const skip = (pageNumber - 1) * limitNumber;
+
+  // 1. Find all orders belonging to this customer
+  const orders = await Order.find({ customerId: userId }).select('_id');
+  const orderIds = orders.map(o => o._id);
+
+  if (orderIds.length === 0) {
+    return {
+      payments: [],
+      pagination: {
+        total: 0,
+        page: pageNumber,
+        limit: limitNumber,
+        totalPages: 0
+      }
+    };
+  }
+
+  // 2. Find payments matching those order IDs
+  const query = { orderId: { $in: orderIds } };
+
+  const [payments, total] = await Promise.all([
+    Payment.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNumber)
+      .populate({ path: 'orderId', select: '_id totalPrice status' })
+      .lean(),
+    Payment.countDocuments(query)
+  ]);
+
+  return {
+    payments,
+    pagination: {
+      total,
+      page: pageNumber,
+      limit: limitNumber,
+      totalPages: Math.ceil(total / limitNumber)
+    }
+  };
+};
+
 const updatePaymentStatus = async (paymentId, status, transactionRef, userRole) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -304,5 +349,6 @@ export const paymentService = {
   updatePaymentStatus,
   updatePaymentMethod,
   deletePayment,
-  confirmPaymentByTransactionRef
+  confirmPaymentByTransactionRef,
+  getMyPayments
 };

@@ -17,6 +17,14 @@ Router.route('/webhook/momo')
 Router.route('/webhook/vnpay')
   .post(paymentController.handleWebhook);
 
+// ============== AUTHENTICATED ==============
+
+Router.route('/my-payments')
+  .get(auth, paymentController.getMyPayments);
+
+Router.route('/by-order/:orderId')
+  .get(auth, paymentController.getPaymentByOrderId);
+
 // ============== STAFF/ADMIN ==============
 
 Router.route('/')
@@ -32,10 +40,5 @@ Router.route('/:id/status')
 
 Router.route('/:id/method')
   .patch(staffAuth, paymentValidation.updatePaymentMethod, paymentController.updatePaymentMethod);
-
-// ============== AUTHENTICATED ==============
-
-Router.route('/by-order/:orderId')
-  .get(auth, paymentController.getPaymentByOrderId);
 
 export const paymentRoute = Router;

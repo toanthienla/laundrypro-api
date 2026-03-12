@@ -11,6 +11,19 @@ const createPayment = async (req, res, next) => {
       data: result
     });
   } catch (error) {
+  }
+};
+
+const getMyPayments = async (req, res, next) => {
+  try {
+    const userId = req.jwtDecoded._id;
+    const { page, limit } = req.query;
+    const result = await paymentService.getMyPayments(userId, { page, limit });
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
     next(error);
   }
 };
@@ -138,5 +151,6 @@ export const paymentController = {
   updatePaymentStatus,
   updatePaymentMethod,
   deletePayment,
-  handleWebhook
+  handleWebhook,
+  getMyPayments
 };
