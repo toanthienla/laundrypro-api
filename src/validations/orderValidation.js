@@ -42,7 +42,7 @@ const updateOrder = async (req, res, next) => {
 
 const updateOrderStatus = async (req, res, next) => {
   const condition = Joi.object({
-    status: Joi.string().valid('pending', 'processing', 'completed', 'cancelled').required()
+    status: Joi.string().valid('pending', 'processing', 'completed', 'cancelled', 'deleted').required()
   });
 
   try {

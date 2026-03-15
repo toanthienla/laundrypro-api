@@ -623,6 +623,22 @@ const createStaff = async (reqBody) => {
   return staff;
 };
 
+const updateStaff = async (userId, reqBody) => {
+  const user = await User.findOneById(userId);
+
+  if (!user) {
+    throw new ApiError(StatusCodes.NOT_FOUND, 'Staff not found.');
+  }
+
+  const updateData = {};
+  if (reqBody.name) updateData.name = reqBody.name;
+  if (reqBody.phone) updateData.phone = reqBody.phone;
+  if (reqBody.email !== undefined) updateData.email = reqBody.email;
+
+  const updatedStaff = await User.updateUser(userId, updateData);
+  return updatedStaff;
+};
+
 const updateUserRole = async (userId, role) => {
   const user = await User.findOneById(userId);
 
@@ -697,6 +713,33 @@ const deleteUser = async (userId) => {
   await User.deleteUser(userId);
 };
 
+const getUserStats = async () => {
+  const [byRole, byStatus] = await Promise.all([
+    User.aggregate([{ $group: { _id: '$role', count: { $sum: 1 } } }]),
+    User.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }])
+  ]);
+
+  const roleMap = {};
+  byRole.forEach(r => { roleMap[r._id] = r.count; });
+
+  const statusMap = {};
+  byStatus.forEach(s => { statusMap[s._id] = s.count; });
+
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const newUsersCount = await User.countDocuments({ createdAt: { $gte: thirtyDaysAgo } });
+
+  return {
+    totalUsers: Object.values(roleMap).reduce((a, b) => a + b, 0),
+    customers: roleMap['customer'] || 0,
+    staff: roleMap['staff'] || 0,
+    admins: roleMap['admin'] || 0,
+    active: statusMap['active'] || 0,
+    suspended: statusMap['suspended'] || 0,
+    newUsersLast30Days: newUsersCount
+  };
+};
+
 export const userService = {
   // Auth
   checkLoginMethod,
@@ -721,7 +764,10 @@ export const userService = {
   getAllUsers,
   getUserById,
   createStaff,
+  updateStaff,
   updateUserRole,
   updateUserStatus,
-  deleteUser
+  deleteUser,
+  // Stats
+  getUserStats
 };

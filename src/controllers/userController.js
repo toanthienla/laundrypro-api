@@ -318,6 +318,20 @@ const createStaff = async (req, res, next) => {
   }
 };
 
+const updateStaff = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const result = await userService.updateStaff(id, req.body);
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: 'Staff updated successfully.',
+      data: result
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const updateUserRole = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -361,6 +375,18 @@ const deleteUser = async (req, res, next) => {
   }
 };
 
+const getUserStats = async (req, res, next) => {
+  try {
+    const result = await userService.getUserStats();
+    res.status(StatusCodes.OK).json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const userController = {
   // Auth
   checkLoginMethod,
@@ -386,7 +412,10 @@ export const userController = {
   getAllUsers,
   getUserById,
   createStaff,
+  updateStaff,
   updateUserRole,
   updateUserStatus,
-  deleteUser
+  deleteUser,
+  // Stats
+  getUserStats
 };

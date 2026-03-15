@@ -2,7 +2,8 @@ import mongoose from 'mongoose';
 
 const ORDER_STATUS = {
   PENDING: 'pending',
-  COMPLETED: 'completed'
+  COMPLETED: 'completed',
+  DELETED: 'deleted'
 };
 
 const INVALID_UPDATE_FIELDS = ['_id', 'customerId', 'createdBy', 'createdAt'];

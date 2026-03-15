@@ -16,7 +16,7 @@ const isAuthorized = async (req, res, next) => {
     next();
   } catch (error) {
     // Token expired or invalid
-    if (error.message?.includes('expired')) {
+    if (error.name === 'TokenExpiredError' || error.message?.includes('expired')) {
       return next(new ApiError(StatusCodes.GONE, 'Token expired. Please refresh.'));
     }
     return next(new ApiError(StatusCodes.UNAUTHORIZED, 'Unauthorized. Please login.'));

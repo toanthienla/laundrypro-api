@@ -65,11 +65,15 @@ Router.route('/customers/:id/history')
 Router.route('/users')
   .get(adminAuth, userController.getAllUsers);
 
+Router.route('/stats')
+  .get(adminAuth, userController.getUserStats);
+
 Router.route('/users/staff')
   .post(adminAuth, userValidation.createStaff, userController.createStaff);
 
 Router.route('/users/:id')
   .get(adminAuth, userController.getUserById)
+  .put(adminAuth, userValidation.updateStaff, userController.updateStaff)
   .delete(adminAuth, userController.deleteUser);
 
 Router.route('/users/:id/role')

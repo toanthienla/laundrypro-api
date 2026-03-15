@@ -189,6 +189,23 @@ const createStaff = async (req, res, next) => {
   }
 };
 
+const updateStaff = async (req, res, next) => {
+  const condition = Joi.object({
+    name: Joi.string().optional().min(3).max(50).trim().strict(),
+    phone: Joi.string().optional().pattern(PHONE_RULE).messages({
+      'string.pattern.base': PHONE_RULE_MESSAGE
+    }),
+    email: Joi.string().pattern(EMAIL_RULE).message(EMAIL_RULE_MESSAGE).optional().allow(null, '')
+  });
+
+  try {
+    await condition.validateAsync(req.body, { abortEarly: false });
+    next();
+  } catch (error) {
+    next(new ApiError(StatusCodes.UNPROCESSABLE_ENTITY, new Error(error).message));
+  }
+};
+
 const updateUserRole = async (req, res, next) => {
   const condition = Joi.object({
     role: Joi.string().valid('customer', 'staff', 'admin').required()
@@ -227,6 +244,7 @@ export const userValidation = {
   createCustomer,
   updateCustomer,
   createStaff,
+  updateStaff,
   updateUserRole,
   updateUserStatus
 };

@@ -284,27 +284,78 @@ const getOrderById = async (orderId) => {
   };
 };
 
-const updateOrder = async (orderId, reqBody, userRole) => {
+const updateOrder = async (orderId, reqBody) => {
+  const { customerPhone, customerName, customerAddress, items, note } = reqBody;
   const order = await Order.findById(orderId);
 
   if (!order) {
     throw new ApiError(StatusCodes.NOT_FOUND, 'Order not found.');
   }
 
-  if (userRole !== 'admin' && order.status === ORDER_STATUS.COMPLETED) {
-    throw new ApiError(StatusCodes.FORBIDDEN, 'Only admin can modify completed orders.');
+  if (order.status !== ORDER_STATUS.PENDING) {
+    // For non-pending orders, only note updates are allowed
+    if (items || customerPhone) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'Only pending orders can have their items or customer fully edited.');
+    }
   }
 
-  const updateData = {};
-  if (reqBody.note !== undefined) updateData.note = reqBody.note;
+  // Update customer info if provided
+  if (customerPhone && customerName) {
+    const customer = await User.findOrCreateCustomer(customerPhone, customerName, customerAddress);
+    order.customerId = customer._id;
+  }
+
+  let totalPrice = order.totalPrice;
+
+  // Recreate items if provided
+  if (items && Array.isArray(items)) {
+    // Delete existing items
+    await OrderItem.deleteByOrderId(orderId);
+
+    totalPrice = 0;
+    const newOrderItems = [];
+
+    for (const item of items) {
+      const service = await Service.findOneById(item.serviceId);
+      if (!service) continue;
+
+      const unitPrice = item.unitPrice !== undefined ? item.unitPrice : service.price;
+      const itemTotal = item.quantity * unitPrice;
+
+      newOrderItems.push({
+        orderId: order._id,
+        serviceId: service._id,
+        serviceName: service.name,
+        serviceCategory: service.category,
+        servicePrice: service.price,
+        serviceUnit: service.unit,
+        quantity: item.quantity,
+        unitPrice: unitPrice,
+        totalPrice: itemTotal,
+        note: item.note || null
+      });
+
+      totalPrice += itemTotal;
+    }
+
+    for (const itemData of newOrderItems) {
+      await OrderItem.createItem(itemData);
+    }
+  }
+
+  const updateData = {
+    customerId: order.customerId,
+    totalPrice
+  };
+  if (note !== undefined) updateData.note = note;
 
   const updatedOrder = await Order.updateOrder(orderId, updateData);
-  const orderItems = await OrderItem.findByOrderId(orderId);
+  const finalOrderItems = await OrderItem.findByOrderId(orderId);
   const payment = await Payment.findByOrderId(orderId);
 
   return {
     ...updatedOrder.toObject(),
-    orderItems,
+    orderItems: finalOrderItems,
     payment: payment || null
   };
 };
@@ -320,6 +371,7 @@ const updateOrderStatus = async (orderId, status, userRole) => {
     throw new ApiError(StatusCodes.FORBIDDEN, 'Only admin can modify completed orders.');
   }
 
+  // Payment check only required when completing an order
   if (status === ORDER_STATUS.COMPLETED) {
     const payment = await Payment.findByOrderId(orderId);
 
