@@ -2,6 +2,9 @@ import { StatusCodes } from 'http-status-codes';
 import { User, USER_ROLES, USER_STATUS } from '~/models/userModel';
 import { Order } from '~/models/orderModel';
 import { OrderItem } from '~/models/orderItemModel';
+import { Payment, PAYMENT_STATUS } from '~/models/paymentModel';
+import { Service } from '~/models/serviceModel';
+import { Contact } from '~/models/contactModel';
 import { JwtProvider } from '~/providers/JwtProvider';
 import { FirebaseProvider } from '~/providers/FirebaseProvider';
 import { CloudinaryProvider } from '~/providers/CloudinaryProvider';
@@ -435,12 +438,15 @@ const getAllCustomers = async (query = {}) => {
 
   const skip = (parseInt(page) - 1) * parseInt(limit);
 
-  const [customers, total] = await Promise.all([
+  const [customers, total, allCustomersTotal, active, verified] = await Promise.all([
     User.find(filter)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit)),
-    User.countDocuments(filter)
+    User.countDocuments(filter),
+    User.countDocuments({ role: USER_ROLES.CUSTOMER }),
+    User.countDocuments({ role: USER_ROLES.CUSTOMER, status: USER_STATUS.ACTIVE }),
+    User.countDocuments({ role: USER_ROLES.CUSTOMER, isVerified: true })
   ]);
 
   return {
@@ -450,6 +456,11 @@ const getAllCustomers = async (query = {}) => {
       limit: parseInt(limit),
       total,
       totalPages: Math.ceil(total / parseInt(limit))
+    },
+    stats: {
+      total: allCustomersTotal,
+      active,
+      verified
     }
   };
 };
@@ -571,12 +582,21 @@ const getAllUsers = async (query = {}) => {
 
   const skip = (parseInt(page) - 1) * parseInt(limit);
 
-  const [users, total] = await Promise.all([
+  const roleFilter = {};
+  if (role) {
+    const roles = role.split(',');
+    roleFilter.role = roles.length > 1 ? { $in: roles } : role;
+  }
+
+  const [users, total, statsTotal, active, verified] = await Promise.all([
     User.find(filter)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit)),
-    User.countDocuments(filter)
+    User.countDocuments(filter),
+    User.countDocuments(roleFilter),
+    User.countDocuments({ ...roleFilter, status: USER_STATUS.ACTIVE }),
+    User.countDocuments({ ...roleFilter, isVerified: true })
   ]);
 
   return {
@@ -586,6 +606,11 @@ const getAllUsers = async (query = {}) => {
       limit: parseInt(limit),
       total,
       totalPages: Math.ceil(total / parseInt(limit))
+    },
+    stats: {
+      total: statsTotal,
+      active,
+      verified
     }
   };
 };
@@ -714,29 +739,108 @@ const deleteUser = async (userId) => {
 };
 
 const getUserStats = async () => {
-  const [byRole, byStatus] = await Promise.all([
+  const [byRole, byStatus, ordersByStatus, paymentsByStatus, serviceStats, customerStats, staffStats, totalMessages] = await Promise.all([
     User.aggregate([{ $group: { _id: '$role', count: { $sum: 1 } } }]),
-    User.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }])
+    User.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
+    Order.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
+    Payment.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
+    Service.aggregate([
+      {
+        $group: {
+          _id: null,
+          total: { $sum: 1 },
+          active: { $sum: { $cond: ['$active', 1, 0] } }
+        }
+      }
+    ]),
+    User.aggregate([
+      { $match: { role: USER_ROLES.CUSTOMER } },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: 1 },
+          active: { $sum: { $cond: [{ $eq: ['$status', USER_STATUS.ACTIVE] }, 1, 0] } },
+          verified: { $sum: { $cond: ['$isVerified', 1, 0] } }
+        }
+      }
+    ]),
+    User.aggregate([
+      { $match: { role: USER_ROLES.STAFF } },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: 1 },
+          active: { $sum: { $cond: [{ $eq: ['$status', USER_STATUS.ACTIVE] }, 1, 0] } },
+          verified: { $sum: { $cond: ['$isVerified', 1, 0] } }
+        }
+      }
+    ]),
+    Contact.countDocuments()
   ]);
 
-  const roleMap = {};
-  byRole.forEach(r => { roleMap[r._id] = r.count; });
+  const countByKey = (rows) => rows.reduce((acc, row) => {
+    acc[row._id] = row.count;
+    return acc;
+  }, {});
 
-  const statusMap = {};
-  byStatus.forEach(s => { statusMap[s._id] = s.count; });
+  const roleMap = countByKey(byRole);
+  const statusMap = countByKey(byStatus);
+  const orderStatusMap = countByKey(ordersByStatus);
+  const paymentStatusMap = countByKey(paymentsByStatus);
+
+  const serviceSummary = serviceStats[0] || { total: 0, active: 0 };
+  const customerSummary = customerStats[0] || { total: 0, active: 0, verified: 0 };
+  const staffSummary = staffStats[0] || { total: 0, active: 0, verified: 0 };
+
+  const totalUsers = Object.values(roleMap).reduce((a, b) => a + b, 0);
+  const totalOrders = Object.values(orderStatusMap).reduce((a, b) => a + b, 0);
+  const totalPayments = Object.values(paymentStatusMap).reduce((a, b) => a + b, 0);
 
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   const newUsersCount = await User.countDocuments({ createdAt: { $gte: thirtyDaysAgo } });
 
   return {
-    totalUsers: Object.values(roleMap).reduce((a, b) => a + b, 0),
+    totalUsers,
     customers: roleMap['customer'] || 0,
     staff: roleMap['staff'] || 0,
     admins: roleMap['admin'] || 0,
     active: statusMap['active'] || 0,
     suspended: statusMap['suspended'] || 0,
-    newUsersLast30Days: newUsersCount
+    newUsersLast30Days: newUsersCount,
+    dashboard: {
+      orders: {
+        total: totalOrders,
+        pending: orderStatusMap.pending || 0,
+        completed: orderStatusMap.completed || 0,
+        deleted: orderStatusMap.deleted || 0
+      },
+      payments: {
+        total: totalPayments,
+        paid: paymentStatusMap[PAYMENT_STATUS.PAID] || 0,
+        pending: paymentStatusMap[PAYMENT_STATUS.PENDING] || 0,
+        failed: paymentStatusMap[PAYMENT_STATUS.FAILED] || 0,
+        refunded: paymentStatusMap[PAYMENT_STATUS.REFUNDED] || 0
+      },
+      services: {
+        total: serviceSummary.total,
+        active: serviceSummary.active,
+        hidden: serviceSummary.total - serviceSummary.active
+      },
+      customers: {
+        total: customerSummary.total,
+        active: customerSummary.active,
+        verified: customerSummary.verified
+      },
+      inquiries: {
+        total: totalMessages
+      },
+      staffs: {
+        total: staffSummary.total,
+        active: staffSummary.active,
+        verified: staffSummary.verified
+      }
+    }
   };
 };
 

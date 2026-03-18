@@ -26,6 +26,9 @@ Router.route('/search')
 Router.route('/stats')
   .get(adminAuth, orderController.getOrderStats);
 
+Router.route('/sync-missing-payments')
+  .post(adminAuth, orderController.syncMissingPayments);
+
 Router.route('/:id')
   .get(staffAuth, orderController.getOrderById)
   .put(staffAuth, orderValidation.updateOrder, orderController.updateOrder)

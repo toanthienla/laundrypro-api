@@ -49,7 +49,19 @@ const getAllServices = async (query = {}) => {
   }
 
   const services = await Service.find(filter).sort({ category: 1, name: 1 });
-  return services;
+  const [total, activeCount] = await Promise.all([
+    Service.countDocuments(),
+    Service.countDocuments({ active: true })
+  ]);
+
+  return {
+    services,
+    stats: {
+      total,
+      active: activeCount,
+      hidden: total - activeCount
+    }
+  };
 };
 
 const getServiceById = async (serviceId) => {

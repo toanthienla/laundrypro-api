@@ -15,7 +15,8 @@ const getAllContacts = async (query = {}) => {
 
   return {
     contacts,
-    pagination: { page: parseInt(page), limit: parseInt(limit), total }
+    pagination: { page: parseInt(page), limit: parseInt(limit), total },
+    stats: { total }
   };
 };
 

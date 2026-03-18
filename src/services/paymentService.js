@@ -125,13 +125,23 @@ const getAllPayments = async (query = {}) => {
 
   const skip = (parseInt(page) - 1) * parseInt(limit);
 
-  const [payments, total] = await Promise.all([
+  const statsPromise = Payment.aggregate([
+    {
+      $group: {
+        _id: '$status',
+        count: { $sum: 1 }
+      }
+    }
+  ]);
+
+  const [payments, total, paymentStats] = await Promise.all([
     Payment.find(filter)
       .populate('orderId', 'customerId totalPrice status')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit)),
-    Payment.countDocuments(filter)
+    Payment.countDocuments(filter),
+    statsPromise
   ]);
 
   return {
@@ -141,6 +151,13 @@ const getAllPayments = async (query = {}) => {
       limit: parseInt(limit),
       total,
       totalPages: Math.ceil(total / parseInt(limit))
+    },
+    stats: {
+      total: paymentStats.reduce((sum, item) => sum + item.count, 0),
+      paid: paymentStats.find(item => item._id === PAYMENT_STATUS.PAID)?.count || 0,
+      pending: paymentStats.find(item => item._id === PAYMENT_STATUS.PENDING)?.count || 0,
+      failed: paymentStats.find(item => item._id === PAYMENT_STATUS.FAILED)?.count || 0,
+      refunded: paymentStats.find(item => item._id === PAYMENT_STATUS.REFUNDED)?.count || 0
     }
   };
 };

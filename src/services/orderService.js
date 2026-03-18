@@ -3,9 +3,43 @@ import mongoose from 'mongoose';
 import { Order, ORDER_STATUS } from '~/models/orderModel';
 import { OrderItem } from '~/models/orderItemModel';
 import { User } from '~/models/userModel';
-import { Payment, PAYMENT_STATUS } from '~/models/paymentModel';
+import { Payment, PAYMENT_METHOD, PAYMENT_STATUS } from '~/models/paymentModel';
 import { Service } from '~/models/serviceModel';
 import ApiError from '~/utils/ApiError';
+
+const syncPendingPaymentAmount = async (orderId, totalPrice) => {
+  let payment = await Payment.findByOrderId(orderId);
+
+  if (payment?.status === PAYMENT_STATUS.PAID) {
+    throw new ApiError(StatusCodes.BAD_REQUEST, 'Cannot change order total for an order that already has a paid payment.');
+  }
+
+  if (payment) {
+    payment = await Payment.findByIdAndUpdate(
+      payment._id,
+      {
+        $set: {
+          amount: totalPrice,
+          status: PAYMENT_STATUS.PENDING,
+          paidAt: null,
+          transactionRef: null
+        }
+      },
+      { new: true, runValidators: true }
+    );
+  } else {
+    [payment] = await Payment.createPayment({
+      orderId,
+      method: PAYMENT_METHOD.CASH,
+      amount: totalPrice,
+      status: PAYMENT_STATUS.PENDING,
+      transactionRef: null,
+      paidAt: null
+    });
+  }
+
+  return payment;
+};
 
 // ==================== CUSTOMER ====================
 
@@ -71,7 +105,6 @@ const getMyOrderById = async (orderId, userId) => {
 
 const createOrder = async (reqBody, createdByUserId) => {
   const { customerPhone, customerName, customerAddress, items, note } = reqBody;
-
   const customer = await User.findOrCreateCustomer(customerPhone, customerName, customerAddress);
 
   const orderItems = [];
@@ -121,6 +154,15 @@ const createOrder = async (reqBody, createdByUserId) => {
     });
   }
 
+  const [payment] = await Payment.createPayment({
+    orderId: order._id,
+    method: PAYMENT_METHOD.CASH,
+    amount: totalPrice,
+    status: PAYMENT_STATUS.PENDING,
+    transactionRef: null,
+    paidAt: null
+  });
+
   const completeOrder = await Order.findById(order._id)
     .populate('customerId', 'phone name address')
     .populate('createdBy', 'phone name');
@@ -130,7 +172,7 @@ const createOrder = async (reqBody, createdByUserId) => {
   return {
     ...completeOrder.toObject(),
     orderItems: savedItems,
-    payment: null
+    payment
   };
 };
 
@@ -232,14 +274,24 @@ const getAllOrders = async (query = {}) => {
 
   const skip = (parseInt(page) - 1) * parseInt(limit);
 
-  const [orders, total] = await Promise.all([
+  const statsPromise = Order.aggregate([
+    {
+      $group: {
+        _id: '$status',
+        count: { $sum: 1 }
+      }
+    }
+  ]);
+
+  const [orders, total, orderStats] = await Promise.all([
     Order.find(filter)
       .populate('customerId', 'phone name address')
       .populate('createdBy', 'phone name')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit)),
-    Order.countDocuments(filter)
+    Order.countDocuments(filter),
+    statsPromise
   ]);
 
   const ordersWithDetails = await Promise.all(
@@ -261,6 +313,12 @@ const getAllOrders = async (query = {}) => {
       limit: parseInt(limit),
       total,
       totalPages: Math.ceil(total / parseInt(limit))
+    },
+    stats: {
+      total: orderStats.reduce((sum, item) => sum + item.count, 0),
+      pending: orderStats.find(item => item._id === ORDER_STATUS.PENDING)?.count || 0,
+      completed: orderStats.find(item => item._id === ORDER_STATUS.COMPLETED)?.count || 0,
+      deleted: orderStats.find(item => item._id === ORDER_STATUS.DELETED)?.count || 0
     }
   };
 };
@@ -306,9 +364,14 @@ const updateOrder = async (orderId, reqBody) => {
   }
 
   let totalPrice = order.totalPrice;
+  let payment = await Payment.findByOrderId(orderId);
 
   // Recreate items if provided
   if (items && Array.isArray(items)) {
+    if (payment?.status === PAYMENT_STATUS.PAID) {
+      throw new ApiError(StatusCodes.BAD_REQUEST, 'Cannot edit items for an order that already has a paid payment.');
+    }
+
     // Delete existing items
     await OrderItem.deleteByOrderId(orderId);
 
@@ -341,6 +404,8 @@ const updateOrder = async (orderId, reqBody) => {
     for (const itemData of newOrderItems) {
       await OrderItem.createItem(itemData);
     }
+
+    payment = await syncPendingPaymentAmount(orderId, totalPrice);
   }
 
   const updateData = {
@@ -351,7 +416,7 @@ const updateOrder = async (orderId, reqBody) => {
 
   const updatedOrder = await Order.updateOrder(orderId, updateData);
   const finalOrderItems = await OrderItem.findByOrderId(orderId);
-  const payment = await Payment.findByOrderId(orderId);
+  payment = payment || await Payment.findByOrderId(orderId);
 
   return {
     ...updatedOrder.toObject(),
@@ -540,6 +605,50 @@ const getOrderStats = async (query = {}) => {
   };
 };
 
+const syncMissingPayments = async () => {
+  const ordersWithoutPayments = await Order.aggregate([
+    {
+      $lookup: {
+        from: 'payments',
+        localField: '_id',
+        foreignField: 'orderId',
+        as: 'payments'
+      }
+    },
+    {
+      $match: {
+        payments: { $eq: [] }
+      }
+    },
+    {
+      $project: {
+        _id: 1,
+        totalPrice: 1,
+        status: 1,
+        completedAt: 1
+      }
+    }
+  ]);
+
+  for (const order of ordersWithoutPayments) {
+    const isCompleted = order.status === ORDER_STATUS.COMPLETED;
+
+    await Payment.createPayment({
+      orderId: order._id,
+      method: PAYMENT_METHOD.CASH,
+      amount: order.totalPrice,
+      status: isCompleted ? PAYMENT_STATUS.PAID : PAYMENT_STATUS.PENDING,
+      transactionRef: null,
+      paidAt: isCompleted ? order.completedAt || new Date() : null
+    });
+  }
+
+  return {
+    scanned: ordersWithoutPayments.length,
+    created: ordersWithoutPayments.length
+  };
+};
+
 // ==================== ORDER ITEMS ====================
 
 const addOrderItem = async (orderId, reqBody, userRole) => {
@@ -582,6 +691,7 @@ const addOrderItem = async (orderId, reqBody, userRole) => {
 
   const newTotal = await OrderItem.calculateOrderTotal(orderId);
   await Order.updateOrder(orderId, { totalPrice: newTotal });
+  await syncPendingPaymentAmount(orderId, newTotal);
 
   return getOrderById(orderId);
 };
@@ -612,6 +722,7 @@ const updateOrderItem = async (orderId, itemId, reqBody, userRole) => {
 
   const newTotal = await OrderItem.calculateOrderTotal(orderId);
   await Order.updateOrder(orderId, { totalPrice: newTotal });
+  await syncPendingPaymentAmount(orderId, newTotal);
 
   return getOrderById(orderId);
 };
@@ -637,6 +748,7 @@ const deleteOrderItem = async (orderId, itemId, userRole) => {
 
   const newTotal = await OrderItem.calculateOrderTotal(orderId);
   await Order.updateOrder(orderId, { totalPrice: newTotal });
+  await syncPendingPaymentAmount(orderId, newTotal);
 
   return getOrderById(orderId);
 };
@@ -652,6 +764,7 @@ export const orderService = {
   updateOrderStatus,
   deleteOrder,
   getOrderStats,
+  syncMissingPayments,
   addOrderItem,
   updateOrderItem,
   deleteOrderItem

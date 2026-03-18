@@ -154,6 +154,19 @@ const getOrderStats = async (req, res, next) => {
   }
 };
 
+const syncMissingPayments = async (req, res, next) => {
+  try {
+    const result = await orderService.syncMissingPayments();
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: 'Missing order payments synced successfully.',
+      data: result
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // ============== ORDER ITEMS ==============
 
 const addOrderItem = async (req, res, next) => {
@@ -214,6 +227,7 @@ export const orderController = {
   updateOrderStatus,
   deleteOrder,
   getOrderStats,
+  syncMissingPayments,
   // Order Items
   addOrderItem,
   updateOrderItem,
