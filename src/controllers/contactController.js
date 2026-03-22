@@ -26,7 +26,21 @@ const getAllContacts = async (req, res, next) => {
   }
 };
 
+const updateStatus = async (req, res, next) => {
+  try {
+    const result = await contactService.updateContactStatus(req.params.id, req.body.status);
+    res.status(StatusCodes.OK).json({
+      success: true,
+      message: 'Status updated.',
+      data: result
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const contactController = {
   sendContactMessage,
-  getAllContacts
+  getAllContacts,
+  updateStatus
 };

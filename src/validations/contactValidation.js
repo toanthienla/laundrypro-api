@@ -19,6 +19,20 @@ const sendContactMessage = async (req, res, next) => {
   }
 };
 
+const updateContactStatus = async (req, res, next) => {
+  const condition = Joi.object({
+    status: Joi.string().valid('new', 'read', 'replied').required()
+  });
+
+  try {
+    await condition.validateAsync(req.body, { abortEarly: false });
+    next();
+  } catch (error) {
+    next(new ApiError(StatusCodes.UNPROCESSABLE_ENTITY, new Error(error).message));
+  }
+};
+
 export const contactValidation = {
-  sendContactMessage
+  sendContactMessage,
+  updateContactStatus
 };

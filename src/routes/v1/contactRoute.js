@@ -11,4 +11,7 @@ Router.route('/')
 Router.route('/admin')
   .get(authMiddleware.isAuthorized, authMiddleware.isAdmin, contactController.getAllContacts);
 
+Router.route('/admin/:id/status')
+  .patch(authMiddleware.isAuthorized, authMiddleware.isAdmin, contactValidation.updateContactStatus, contactController.updateStatus);
+
 export const contactRoute = Router;
