@@ -21,9 +21,9 @@ const syncPendingPaymentAmount = async (orderId, totalPrice) => {
         $set: {
           amount: totalPrice,
           status: PAYMENT_STATUS.PENDING,
-          paidAt: null,
-          transactionRef: null
-        }
+          paidAt: null
+        },
+        $unset: { transactionRef: 1 }
       },
       { new: true, runValidators: true }
     );
@@ -33,7 +33,6 @@ const syncPendingPaymentAmount = async (orderId, totalPrice) => {
       method: PAYMENT_METHOD.CASH,
       amount: totalPrice,
       status: PAYMENT_STATUS.PENDING,
-      transactionRef: null,
       paidAt: null
     });
   }
@@ -159,7 +158,6 @@ const createOrder = async (reqBody, createdByUserId) => {
     method: PAYMENT_METHOD.CASH,
     amount: totalPrice,
     status: PAYMENT_STATUS.PENDING,
-    transactionRef: null,
     paidAt: null
   });
 
@@ -638,7 +636,6 @@ const syncMissingPayments = async () => {
       method: PAYMENT_METHOD.CASH,
       amount: order.totalPrice,
       status: isCompleted ? PAYMENT_STATUS.PAID : PAYMENT_STATUS.PENDING,
-      transactionRef: null,
       paidAt: isCompleted ? order.completedAt || new Date() : null
     });
   }

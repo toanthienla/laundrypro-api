@@ -44,7 +44,7 @@ const createPayment = async (reqBody, userRole) => {
       method,
       amount,
       status: PAYMENT_STATUS.PENDING,
-      transactionRef: transactionRef || null,
+      ...(transactionRef && { transactionRef }),
       paidAt: null
     };
 
