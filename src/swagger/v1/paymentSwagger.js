@@ -27,7 +27,7 @@
  *           example: "65b1234567890abcdef12346"
  *         method:
  *           type: string
- *           enum: [cash, momo, vnpay, bank]
+ *           enum: [cash]
  *           example: "cash"
  *         amount:
  *           type: number
@@ -83,7 +83,7 @@
  *         name: method
  *         schema:
  *           type: string
- *           enum: [cash, momo, vnpay, bank]
+ *           enum: [cash]
  *       - in: query
  *         name: startDate
  *         schema:
@@ -158,7 +158,7 @@
  *                 example: "65b1234567890abcdef12346"
  *               method:
  *                 type: string
- *                 enum: [cash, momo, vnpay, bank]
+ *                 enum: [cash]
  *                 example: "cash"
  *               amount:
  *                 type: number
@@ -341,7 +341,7 @@
  *             properties:
  *               method:
  *                 type: string
- *                 enum: [cash, momo, vnpay, bank]
+ *                 enum: [cash]
  *                 description: |
  *                   New payment method. Must be one of the supported methods.
  *                   Cannot be changed if payment is already processed.

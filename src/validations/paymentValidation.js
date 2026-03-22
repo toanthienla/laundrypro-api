@@ -7,7 +7,7 @@ const createPayment = async (req, res, next) => {
   const condition = Joi.object({
     orderId: Joi.string().pattern(OBJECT_ID_RULE).message(OBJECT_ID_RULE_MESSAGE).required(),
     amount: Joi.number().min(0).required(),
-    method: Joi.string().valid('cash', 'momo', 'vnpay', 'bank').required(),
+    method: Joi.string().valid('cash').required(),
     transactionRef: Joi.string().optional().trim().strict().allow(null, ''),
     markAsPaid: Joi.boolean().optional()
   });
@@ -36,7 +36,7 @@ const updatePaymentStatus = async (req, res, next) => {
 
 const updatePaymentMethod = async (req, res, next) => {
   const condition = Joi.object({
-    method: Joi.string().valid('cash', 'momo', 'vnpay', 'bank').required()
+    method: Joi.string().valid('cash').required()
   });
 
   try {

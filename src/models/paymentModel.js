@@ -8,10 +8,7 @@ const PAYMENT_STATUS = {
 };
 
 const PAYMENT_METHOD = {
-  CASH: 'cash',
-  MOMO: 'momo',
-  VNPAY: 'vnpay',
-  BANK: 'bank'
+  CASH: 'cash'
 };
 
 const paymentSchema = new mongoose.Schema(
